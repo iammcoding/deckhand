@@ -163,6 +163,21 @@ class Bench extends ChangeNotifier {
     _save();
   }
 
+  /// A tab dragged from [from] to [to] (ReorderableListView's indices: [to]
+  /// counts the dragged tab still in place). The tab in front stays in front.
+  void move(int from, int to) {
+    if (from < 0 || from >= tabs.length) return;
+    if (to > from) to--;
+    to = to.clamp(0, tabs.length - 1);
+    if (to == from) return;
+    final front = current;
+    final t = tabs.removeAt(from);
+    tabs.insert(to, t);
+    if (front != null) active = tabs.indexWhere((x) => x.id == front.id);
+    notifyListeners();
+    _save();
+  }
+
   void closeOthers(int i) {
     final keep = tabs[i];
     tabs = [keep];

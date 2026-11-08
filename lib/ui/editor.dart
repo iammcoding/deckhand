@@ -31,7 +31,18 @@ class EditorArea extends StatelessWidget {
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: c.line)),
             ),
-            child: ListView(scrollDirection: Axis.horizontal, children: [for (var i = 0; i < b.tabs.length; i++) _Tab(i)]),
+            // Drag a tab to move it; a click still selects it.
+            child: ReorderableListView(
+              scrollDirection: Axis.horizontal,
+              buildDefaultDragHandles: false,
+              onReorder: b.move,
+              proxyDecorator: (child, _, _) =>
+                  Material(color: Colors.transparent, elevation: 6, borderRadius: BorderRadius.circular(6), child: child),
+              children: [
+                for (var i = 0; i < b.tabs.length; i++)
+                  ReorderableDragStartListener(key: ValueKey(b.tabs[i].id), index: i, child: _Tab(i)),
+              ],
+            ),
           ),
           Expanded(
             child: tab == null

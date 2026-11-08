@@ -5,6 +5,7 @@ import 'core/agents.dart';
 import 'core/ai.dart';
 import 'core/bench.dart';
 import 'core/devices.dart';
+import 'core/fvm.dart';
 import 'core/projects.dart';
 import 'core/sdk.dart';
 import 'ui/theme.dart';
@@ -42,6 +43,8 @@ class _DeckhandState extends State<Deckhand> {
     await Agents.instance.load();
     Devices.instance.watch();
     await Bench.instance.load();
+    // Pins work without this; it finds the fvm command and its cache.
+    Fvm.instance.detect();
     final prefs = await SharedPreferences.getInstance();
     // First launch, or nothing to open yet: the welcome screen.
     _welcome = prefs.getBool('welcome_done') != true || Projects.instance.recent.isEmpty;

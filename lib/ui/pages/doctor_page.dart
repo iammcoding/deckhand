@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/projects.dart';
 import '../../core/sdk.dart';
 import '../widgets/page_header.dart';
 import '../theme.dart';
@@ -51,7 +52,11 @@ class _DoctorPageState extends State<DoctorPage> {
       _error = null;
     });
     try {
-      final r = await Sdk.instance.run(['doctor', '-v'], timeout: const Duration(minutes: 3));
+      final r = await Sdk.instance.run(
+        ['doctor', '-v'],
+        cwd: Projects.instance.current?.path,
+        timeout: const Duration(minutes: 3),
+      );
       final checks = _parse('${r.stdout}');
       setState(() {
         _checks = checks;

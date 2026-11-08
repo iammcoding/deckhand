@@ -321,11 +321,18 @@ class _CreateProjectState extends State<_CreateProject> {
                     label('Kind'),
                     DropdownButtonFormField<String>(
                       initialValue: _template,
+                      isExpanded: true,
                       isDense: true,
                       dropdownColor: c.panel,
                       style: TextStyle(fontSize: 13, color: c.text),
                       decoration: deco(''),
-                      items: [for (final e in _templates.entries) DropdownMenuItem(value: e.key, child: Text(e.value))],
+                      items: [
+                        for (final e in _templates.entries)
+                          DropdownMenuItem(
+                            value: e.key,
+                            child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
                       onChanged: (v) => setState(() => _template = v ?? 'app'),
                     ),
                     if (_hasPlatforms) ...[

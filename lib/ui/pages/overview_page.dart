@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/bench.dart';
 import '../../core/devices.dart';
+import '../../core/fvm.dart';
 import '../../core/jobs.dart';
 import '../../core/problems.dart';
 import '../../core/projects.dart';
@@ -65,7 +66,7 @@ class _OverviewPageState extends State<OverviewPage> {
     if (pr == null) return const SizedBox.shrink();
     final (deps, dev) = _deps(pr);
     return ListenableBuilder(
-      listenable: Listenable.merge([Projects.instance, Devices.instance, currentTask]),
+      listenable: Listenable.merge([Projects.instance, Devices.instance, currentTask, Fvm.instance, sdkChanged]),
       builder: (context, _) {
         final busy = currentTask.value?.running ?? false;
         final dev0 = Devices.instance.selected;
@@ -139,6 +140,7 @@ class _OverviewPageState extends State<OverviewPage> {
             // Facts, as a two-column table with hairlines.
             _rule(c),
             _fact(c, 'Version', pr.version.isEmpty ? '—' : pr.version),
+            if (Fvm.pinFor(pr.path) != null) _pinRow(c, Fvm.pinFor(pr.path)!),
             _fact(c, 'Targets', pr.platforms.isEmpty ? '—' : pr.platforms.map((x) => _platformNames[x] ?? x).join(', ')),
             _fact(c, 'Packages', '$deps, plus $dev for development'),
             _fact(c, 'Location', pr.path, mono: true),
@@ -154,6 +156,35 @@ class _OverviewPageState extends State<OverviewPage> {
           ],
         );
       },
+    );
+  }
+
+  /// The pinned Flutter, and a way to get it when it isn't here.
+  Widget _pinRow(C c, FvmPin pin) {
+    final here = Fvm.instance.sdkDirFor(pin) != null;
+    return InkWell(
+      onTap: () => Bench.instance.open(const EditorTab(TabKind.fvm)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: c.line)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 130,
+              child: Text('Flutter', style: TextStyle(fontSize: 13, color: c.muted)),
+            ),
+            Expanded(
+              child: Text(
+                here ? '${pin.version}, pinned with FVM' : '${pin.version}, pinned with FVM but not installed',
+                style: TextStyle(fontSize: 13, color: here ? c.text : c.warn),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 16, color: c.muted),
+          ],
+        ),
+      ),
     );
   }
 

@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/bench.dart';
+import '../../core/fvm.dart';
 import '../../core/jobs.dart';
+import '../../core/projects.dart';
 import '../../core/sdk.dart';
 import '../theme.dart';
 import '../widgets/page_header.dart';
@@ -207,6 +210,26 @@ class _SdkPageState extends State<SdkPage> {
             ),
           ],
         ),
+        if (Projects.instance.current != null && Fvm.pinFor(Projects.instance.current!.path) != null)
+          _body(c, [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.layers_outlined, size: 15, color: c.accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This page changes your default Flutter. ${Projects.instance.current!.name} uses '
+                      'Flutter ${Fvm.pinFor(Projects.instance.current!.path)!.version} from FVM, which is managed in Flutter versions.',
+                      style: TextStyle(fontSize: 12.5, color: c.muted),
+                    ),
+                  ),
+                  TextButton(onPressed: () => Bench.instance.open(const EditorTab(TabKind.fvm)), child: const Text('Open')),
+                ],
+              ),
+            ),
+          ]),
         _body(c, [
           // Version facts.
           _fact(c, 'Flutter', v == null ? (_loading ? '…' : 'unknown') : '${v['frameworkVersion']}'),

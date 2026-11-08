@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fvm.dart';
 
 /// Finding and running the Flutter tool.
 ///
@@ -70,35 +71,68 @@ class Sdk {
 
   bool get ready => flutterBin != null;
 
-  /// The dart that ships inside this Flutter SDK.
-  String? get dartBin {
-    final f = flutterBin;
+  /// The `flutter` for work in [cwd]: the project's FVM version when it pins
+  /// one that's installed, otherwise the default.
+  String? flutterFor(String? cwd) => Fvm.instance.flutterFor(cwd) ?? flutterBin;
+
+  /// The dart that ships inside the Flutter used for [cwd]. Links are
+  /// followed: Homebrew's `flutter` is a link into the real SDK.
+  String? dartFor(String? cwd) {
+    final f = flutterFor(cwd);
     if (f == null) return null;
-    final d = p.join(p.dirname(f), Platform.isWindows ? 'dart.bat' : 'dart');
-    return File(d).existsSync() ? d : null;
+    final name = Platform.isWindows ? 'dart.bat' : 'dart';
+    final beside = p.join(p.dirname(f), name);
+    if (File(beside).existsSync()) return beside;
+    try {
+      final real = p.join(p.dirname(File(f).resolveSymbolicLinksSync()), name);
+      if (File(real).existsSync()) return real;
+    } catch (_) {}
+    return null;
   }
 
-  /// Start the Flutter tool with [args] in [cwd], streaming its output.
-  /// Args starting with `dart` run that SDK's Dart instead.
-  Future<Process> start(List<String> args, {String? cwd}) {
-    var bin = flutterBin;
-    if (args.isNotEmpty && args.first == 'dart') {
-      bin = dartBin;
-      args = args.sublist(1);
+  /// The environment for work in [cwd]: when a project pins a version, its
+  /// `flutter` and `dart` come first on PATH, for whatever else gets started
+  /// there (a shell command, a coding agent).
+  Map<String, String> envFor(String? cwd) {
+    final pinned = Fvm.instance.flutterFor(cwd);
+    if (pinned == null) return env;
+    final sep = Platform.isWindows ? ';' : ':';
+    return {...env, 'PATH': '${p.dirname(pinned)}$sep${env['PATH'] ?? ''}'};
+  }
+
+  /// What the first argument picks: `dart` and `fvm` run those tools,
+  /// anything else is the Flutter tool for [cwd].
+  ({String? bin, List<String> args, Map<String, String> env}) _command(List<String> args, String? cwd) {
+    if (args.isNotEmpty && args.first == 'fvm') {
+      return (bin: Fvm.instance.bin, args: Fvm.args(args.sublist(1)), env: Fvm.instance.env);
     }
-    if (bin == null) throw StateError('Flutter was not found. Set its path in Settings.');
-    return Process.start(bin, args, workingDirectory: cwd, environment: env, runInShell: Platform.isWindows);
+    if (args.isNotEmpty && args.first == 'dart') {
+      return (bin: dartFor(cwd), args: args.sublist(1), env: envFor(cwd));
+    }
+    return (bin: flutterFor(cwd), args: args, env: envFor(cwd));
   }
 
-  /// Run the Flutter tool and collect what it printed.
+  static Never _notFound(List<String> args) {
+    if (args.isNotEmpty && args.first == 'fvm') throw StateError('FVM is not installed.');
+    throw StateError('Flutter was not found. Set its path in Settings.');
+  }
+
+  /// Start a tool with [args] in [cwd], streaming its output.
+  Future<Process> start(List<String> args, {String? cwd}) {
+    final c = _command(args, cwd);
+    if (c.bin == null) _notFound(args);
+    return Process.start(c.bin!, c.args, workingDirectory: cwd, environment: c.env, runInShell: Platform.isWindows);
+  }
+
+  /// Run a tool and collect what it printed.
   Future<ProcessResult> run(List<String> args, {String? cwd, Duration timeout = const Duration(minutes: 3)}) {
-    final bin = flutterBin;
-    if (bin == null) throw StateError('Flutter was not found. Set its path in Settings.');
+    final c = _command(args, cwd);
+    if (c.bin == null) _notFound(args);
     return Process.run(
-      bin,
-      args,
+      c.bin!,
+      c.args,
       workingDirectory: cwd,
-      environment: env,
+      environment: c.env,
       runInShell: Platform.isWindows,
       stdoutEncoding: utf8,
       stderrEncoding: utf8,
@@ -106,9 +140,23 @@ class Sdk {
   }
 
   /// `flutter --version --machine`: the SDK's version, channel and Dart.
-  Future<Map<String, dynamic>?> version() async {
+  ///
+  /// For a pinned project this is read from the SDK's own file: a version
+  /// FVM just installed downloads its tools on first use, which takes minutes
+  /// and shouldn't start because a status bar wanted a number.
+  Future<Map<String, dynamic>?> version({String? cwd}) async {
+    final pin = Fvm.pinFor(cwd);
+    final dir = pin == null ? null : Fvm.instance.sdkDirFor(pin);
+    if (pin != null && dir != null) {
+      try {
+        final f = File(p.join(dir, 'bin', 'cache', 'flutter.version.json'));
+        return Map<String, dynamic>.from(jsonDecode(await f.readAsString()) as Map);
+      } catch (_) {
+        return {'frameworkVersion': pin.version, 'channel': 'not set up yet'};
+      }
+    }
     try {
-      final r = await run(['--version', '--machine'], timeout: const Duration(seconds: 60));
+      final r = await run(['--version', '--machine'], cwd: cwd, timeout: const Duration(seconds: 60));
       final out = '${r.stdout}';
       final start = out.indexOf('{');
       if (start < 0) return null;

@@ -4,12 +4,26 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'fvm.dart';
 import 'sdk.dart';
 
 enum LogLevel { info, warn, error, progress, system }
 
 /// The app running now, for the Run page and the status bar.
 final currentRun = ValueNotifier<RunSession?>(null);
+
+/// Says in the log when a project's FVM pin decides the Flutter, and warns
+/// when the pinned version isn't installed, so a wrong-version failure can't
+/// look like a mystery.
+void _sayWhichFlutter(String? cwd, void Function(String, LogLevel) add) {
+  final pin = Fvm.pinFor(cwd);
+  if (pin == null) return;
+  if (Fvm.instance.sdkDirFor(pin) != null) {
+    add('Using Flutter ${pin.version}, pinned with FVM.', LogLevel.system);
+  } else {
+    add('This project pins Flutter ${pin.version} with FVM, but it isn\'t installed. Using your default Flutter.', LogLevel.warn);
+  }
+}
 
 class LogLine {
   final DateTime at;
@@ -35,9 +49,20 @@ class Job extends ChangeNotifier {
   Duration get took => (ended ?? DateTime.now()).difference(started);
 
   void add(String text, [LogLevel level = LogLevel.info]) {
-    log.add(LogLine(text, level));
+    log.add(LogLine(cleanLine(text), level));
     if (log.length > 20000) log.removeRange(0, log.length - 20000);
     notifyListeners();
+  }
+
+  static final _ansi = RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]');
+
+  /// Tools colour their output; a log shows the text.
+  static String cleanLine(String line) => line.replaceAll(_ansi, '');
+
+  /// A line from stderr. Tools also warn there, which isn't a failure.
+  static LogLevel stderrLevel(String line) {
+    final l = line.toLowerCase();
+    return l.contains('[warn]') || l.startsWith('warning') ? LogLevel.warn : LogLevel.error;
   }
 
   static LogLevel guess(String line) {
@@ -48,7 +73,9 @@ class Job extends ChangeNotifier {
   }
 
   Future<int> start() async {
-    add(args.first == 'dart' ? '\$ ${args.join(' ')}' : '\$ flutter ${args.join(' ')}', LogLevel.system);
+    final tool = const {'dart', 'fvm'}.contains(args.first);
+    add(tool ? '\$ ${args.join(' ')}' : '\$ flutter ${args.join(' ')}', LogLevel.system);
+    if (args.first != 'fvm') _sayWhichFlutter(cwd, add);
     try {
       final p = await Sdk.instance.start(args, cwd: cwd);
       _p = p;
@@ -57,7 +84,7 @@ class Job extends ChangeNotifier {
       p.stdin.close();
       notifyListeners();
       p.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => add(l, guess(l)));
-      p.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => add(l, LogLevel.error));
+      p.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => add(l, stderrLevel(l)));
       exitCode = await p.exitCode;
     } catch (e) {
       add('$e', LogLevel.error);
@@ -114,6 +141,7 @@ class RunSession extends ChangeNotifier {
   Future<void> start() async {
     final args = [attach ? 'attach' : 'run', '--machine', '-d', deviceId, ...extraArgs];
     _add('\$ flutter ${args.join(' ')}', LogLevel.system);
+    _sayWhichFlutter(projectPath, _add);
     try {
       final p = await Sdk.instance.start(args, cwd: projectPath);
       _p = p;

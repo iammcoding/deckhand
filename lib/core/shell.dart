@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import 'fvm.dart';
 import 'sdk.dart';
 import 'sessions.dart';
 
@@ -22,23 +23,29 @@ class ShellJob extends ChangeNotifier {
   bool get running => _p != null && exitCode == null;
 
   void _add(String t, [LogLevel l = LogLevel.info]) {
-    log.add(LogLine(t, l));
+    log.add(LogLine(Job.cleanLine(t), l));
     notifyListeners();
   }
 
   Future<int> start() async {
     _add('\$ $command', LogLevel.system);
-    // `flutter …` means the Flutter Deckhand uses, even if it isn't on PATH.
-    final bin = Sdk.instance.flutterBin;
-    final cmd = bin != null && command.startsWith('flutter ') ? '"$bin" ${command.substring(8)}' : command;
+    // `flutter …` and `dart …` mean the ones this project uses, even if they
+    // aren't on PATH; `fvm …` the FVM Deckhand found, never stopping to ask.
+    final sdk = Sdk.instance;
+    final flutter = sdk.flutterFor(cwd), dart = sdk.dartFor(cwd), fvm = Fvm.instance.bin;
+    var cmd = command;
+    if (flutter != null && command.startsWith('flutter ')) cmd = '"$flutter" ${command.substring(8)}';
+    if (dart != null && command.startsWith('dart ')) cmd = '"$dart" ${command.substring(5)}';
+    if (fvm != null && command.startsWith('fvm ')) cmd = '"$fvm" ${command.substring(4)} --fvm-skip-input';
+    final env = command.startsWith('fvm ') ? Fvm.instance.env : sdk.envFor(cwd);
     try {
       final p = Platform.isWindows
-          ? await Process.start('cmd', ['/c', cmd], workingDirectory: cwd, environment: Sdk.instance.env)
+          ? await Process.start('cmd', ['/c', cmd], workingDirectory: cwd, environment: env)
           : await Process.start(
               Platform.environment['SHELL'] ?? '/bin/zsh',
               ['-lc', cmd],
               workingDirectory: cwd,
-              environment: Sdk.instance.env,
+              environment: env,
             );
       _p = p;
       notifyListeners();

@@ -167,7 +167,7 @@ ${tail.map((l) => l.text).join('\n')}''';
     final args = [for (final w in words.skip(1)) w == '{prompt}' ? prompt(failure) : w];
     _add('\$ ${words.join(' ')}', LogLevel.system);
     try {
-      final proc = await Process.start(path, args, workingDirectory: projectPath, environment: Sdk.instance.env);
+      final proc = await Process.start(path, args, workingDirectory: projectPath, environment: Sdk.instance.envFor(projectPath));
       _p = proc;
       notifyListeners();
       proc.stdin.close();

@@ -31,7 +31,7 @@ class Problems extends ChangeNotifier {
   int get warnings => list.where((x) => x.severity == 'WARNING').length;
 
   Future<void> run(String projectPath) async {
-    final dart = Sdk.instance.dartBin;
+    final dart = Sdk.instance.dartFor(projectPath);
     if (dart == null || running) return;
     running = true;
     error = null;
@@ -41,7 +41,7 @@ class Problems extends ChangeNotifier {
         dart,
         ['analyze', '--format=machine', '.'],
         workingDirectory: projectPath,
-        environment: Sdk.instance.env,
+        environment: Sdk.instance.envFor(projectPath),
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       ).timeout(const Duration(minutes: 3));

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'fvm.dart';
 import 'sessions.dart';
 
 /// One thing to do to fix it: a shell command, or an edit Deckhand makes.
@@ -29,6 +30,15 @@ class Fixes {
     // The last 400 lines are enough, and keep this cheap on a long log.
     final lines = log.length > 400 ? log.sublist(log.length - 400) : log;
     final text = lines.map((l) => l.text).join('\n');
+    // A pinned version that isn't here explains most of what follows.
+    final pin = Fvm.pinFor(projectPath);
+    if (pin != null && Fvm.instance.installed && Fvm.instance.sdkDirFor(pin) == null) {
+      return Fix(
+        'Flutter ${pin.version} isn\'t installed',
+        'This project pins it with FVM, so this ran on your default Flutter instead.',
+        [FixStep('Install ${pin.version}', command: 'fvm install ${pin.version}')],
+      );
+    }
     for (final rule in _rules) {
       final f = rule(text, projectPath);
       if (f != null) return f;

@@ -109,7 +109,7 @@ class _SmartBarState extends State<SmartBar> {
       _answer = null;
     });
     try {
-      final v = await Sdk.instance.version();
+      final v = await Sdk.instance.version(cwd: widget.projectPath);
       final a = await Ai.instance.explain(
         log: widget.lines,
         projectPath: widget.projectPath,

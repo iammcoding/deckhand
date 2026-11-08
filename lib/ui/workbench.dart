@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../core/ai.dart';
 import '../core/bench.dart';
 import '../core/devices.dart';
+import '../core/fvm.dart';
 import '../core/jobs.dart';
 import '../core/problems.dart';
 import '../core/projects.dart';
@@ -51,15 +52,21 @@ class _WorkbenchState extends State<Workbench> {
     Projects.instance.addListener(_projectChanged);
     Devices.instance.addListener(_changed);
     Problems.instance.addListener(_changed);
+    Fvm.instance.addListener(_changed);
     currentRun.addListener(_runChanged);
     sdkChanged.addListener(_readVersion);
     _projectChanged();
     _readVersion();
   }
 
+  /// The Flutter the open project actually uses.
   void _readVersion() {
-    Sdk.instance.version().then((v) {
-      if (mounted && v != null) setState(() => _flutter = 'Flutter ${v['frameworkVersion']}');
+    final cwd = Projects.instance.current?.path;
+    Sdk.instance.version(cwd: cwd).then((v) {
+      // The project may have changed while this was running.
+      if (mounted && v != null && cwd == Projects.instance.current?.path) {
+        setState(() => _flutter = 'Flutter ${v['frameworkVersion']}');
+      }
     });
   }
 
@@ -69,6 +76,7 @@ class _WorkbenchState extends State<Workbench> {
     Projects.instance.removeListener(_projectChanged);
     Devices.instance.removeListener(_changed);
     Problems.instance.removeListener(_changed);
+    Fvm.instance.removeListener(_changed);
     currentRun.removeListener(_runChanged);
     sdkChanged.removeListener(_readVersion);
     _watched?.removeListener(_changed);
@@ -96,6 +104,7 @@ class _WorkbenchState extends State<Workbench> {
       } catch (_) {}
     }
     _branch = branch;
+    _readVersion();
     _changed();
   }
 
@@ -140,6 +149,7 @@ class _WorkbenchState extends State<Workbench> {
       Command('Open a project folder', 'Projects', _openFolder, keys: '⌘O'),
       Command('New project', 'Projects', () => showCreateProject(context), keys: '⇧⌘N'),
       Command('Flutter SDK: channel, upgrade, settings', 'Show', () => _tab(TabKind.sdk)),
+      Command('Flutter versions (FVM)', 'Show', () => _tab(TabKind.fvm)),
       Command('Check for Flutter updates', 'Flutter', () => runTask('Check for updates', ['upgrade', '--verify-only'])),
       Command('Download tools (precache)', 'Flutter', () => _tab(TabKind.sdk)),
       Command('Emulators', 'Devices', () => _tab(TabKind.devices)),
@@ -365,6 +375,7 @@ class _WorkbenchState extends State<Workbench> {
               _foot(c, Icons.devices_rounded, 'Devices', TabKind.devices),
               _foot(c, Icons.health_and_safety_outlined, 'Doctor', TabKind.doctor),
               _foot(c, Icons.flutter_dash_rounded, 'Flutter SDK', TabKind.sdk),
+              _foot(c, Icons.layers_outlined, 'Flutter versions (FVM)', TabKind.fvm),
               const Spacer(),
               _foot(c, Icons.settings_outlined, 'Settings  ⌘,', TabKind.settings),
             ],
@@ -544,6 +555,15 @@ class _WorkbenchState extends State<Workbench> {
             ),
           ],
           const Spacer(),
+          if (Fvm.pinFor(Projects.instance.current?.path) != null)
+            item(
+              Icons.layers_outlined,
+              Fvm.instance.missingFor(Projects.instance.current?.path)
+                  ? 'FVM ${Fvm.pinFor(Projects.instance.current?.path)!.version} not installed'
+                  : 'FVM ${Fvm.pinFor(Projects.instance.current?.path)!.version}',
+              color: Fvm.instance.missingFor(Projects.instance.current?.path) ? c.warn : null,
+              onTap: () => _tab(TabKind.fvm),
+            ),
           item(
             Icons.auto_awesome_outlined,
             Ai.instance.connected ? Ai.instance.model : 'No AI connected',

@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:deckhand/core/ai.dart';
 import 'package:deckhand/core/fixes.dart';
+import 'package:deckhand/core/safe_fix.dart';
 import 'package:deckhand/core/sessions.dart';
 import 'package:deckhand/ui/theme.dart';
 import 'package:deckhand/ui/widgets/smart_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   group('the translations fix', () {
@@ -97,6 +101,54 @@ void main() {
       // Let the failed call finish.
       await t.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
       await t.pump();
+    });
+
+    testWidgets('a fix that broke something says so, and a good one offers Undo', (t) async {
+      final tmp = Directory.systemTemp.createTempSync('deckhand_bar');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      SafeFixes.storeOverride = p.join(tmp.path, 'store');
+      addTearDown(() => SafeFixes.storeOverride = null);
+      final root = p.join(tmp.path, 'app');
+      final pub = File(p.join(root, 'pubspec.yaml'))..createSync(recursive: true);
+      pub.writeAsStringSync('name: app\n');
+      Future<void> show() => t.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(Brightness.dark),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SmartBar(lines: const [], projectPath: root, log: (_, _) {}),
+            ),
+          ),
+        ),
+      );
+
+      await t.runAsync(
+        () => SafeFixes.instance.guard('bad', root, () async {
+          pub.writeAsStringSync('name: app\nname: app\n');
+          return 0;
+        }, checkAnalyzer: false),
+      );
+      await show();
+      expect(find.textContaining('Your files are back'), findsOneWidget);
+      expect(find.text('Undo'), findsNothing, reason: 'it is already undone');
+
+      await t.runAsync(
+        () => SafeFixes.instance.guard('good', root, () async {
+          pub.writeAsStringSync('name: app\nversion: 1.0.0\n');
+          return 0;
+        }, checkAnalyzer: false),
+      );
+      await t.pump();
+      expect(find.textContaining('Changed pubspec.yaml'), findsOneWidget);
+
+      await t.tap(find.text('Undo'));
+      await t.pumpAndSettle();
+      expect(find.textContaining('pubspec.yaml'), findsWidgets);
+      await t.tap(find.widgetWithText(FilledButton, 'Undo'));
+      await t.pumpAndSettle();
+      expect(pub.readAsStringSync(), 'name: app\n');
+      expect(find.textContaining('Undone'), findsOneWidget);
+      SafeFixes.instance.dismiss(root);
     });
 
     testWidgets('there is no second log inside the bar', (t) async {

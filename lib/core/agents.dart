@@ -99,8 +99,8 @@ class Agents extends ChangeNotifier {
   }
 }
 
-/// One agent run on a failure: its live output, then what it changed, with
-/// an undo for the files it touched that were clean before.
+/// One agent run on a failure: its live output, then what it changed. Undoing
+/// it is the safety net's job, which works without git too (see SafeFixes).
 class AgentRun extends ChangeNotifier {
   final Agent agent;
   final String projectPath;
@@ -110,7 +110,6 @@ class AgentRun extends ChangeNotifier {
   bool git = false;
   Set<String> _dirtyBefore = {};
   List<String> changed = [];
-  bool undone = false;
 
   AgentRun(this.agent, this.projectPath);
 
@@ -214,28 +213,5 @@ ${tail.map((l) => l.text).join('\n')}''';
     for (final f in untracked) {
       _add('new file: $f', LogLevel.system);
     }
-  }
-
-  /// Puts back only the files the agent changed (they were clean before).
-  Future<void> undo() async {
-    if (!git || changed.isEmpty || undone) return;
-    final tracked = await Process.run(
-      'git',
-      ['ls-files', '--', ...changed],
-      workingDirectory: projectPath,
-      environment: Sdk.instance.env,
-    );
-    final trackedSet = const LineSplitter().convert('${tracked.stdout}').toSet();
-    final restore = changed.where(trackedSet.contains).toList();
-    if (restore.isNotEmpty) {
-      await Process.run('git', ['checkout', '--', ...restore], workingDirectory: projectPath, environment: Sdk.instance.env);
-    }
-    for (final f in changed.where((f) => !trackedSet.contains(f))) {
-      try {
-        File(p.join(projectPath, f)).deleteSync();
-      } catch (_) {}
-    }
-    undone = true;
-    _add('Undone: ${changed.length} file${changed.length == 1 ? '' : 's'} put back.', LogLevel.system);
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/agents.dart';
 import '../../core/ai.dart';
 import '../../core/fixes.dart';
+import '../../core/safe_fix.dart';
 import '../../core/sdk.dart';
 import '../../core/sessions.dart';
 import '../../core/shell.dart';
@@ -11,6 +12,59 @@ import '../theme.dart';
 /// Above a log: a problem Deckhand recognises, with a Fix button, or Ask AI
 /// for anything else. What either runs is shown first and runs only on a
 /// click, and its output goes to the log below.
+/// Asks, naming the files, then puts them back. Asked because you may have
+/// kept working in those files since.
+Future<void> confirmUndo(BuildContext context, SafeFix f) async {
+  final c = C.of(context);
+  final lost = f.changes.cannotRestore;
+  final ok =
+      await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: c.panel,
+          title: Text(
+            'Undo "${f.title}"?',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 16, color: c.text),
+          ),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'These go back to how they were before it ran, including anything you changed in them since:',
+                  style: TextStyle(fontSize: 13, height: 1.4, color: c.muted),
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 180),
+                  child: SingleChildScrollView(
+                    child: SelectableText(f.changes.all.join('\n'), style: mono.copyWith(fontSize: 12, color: c.text)),
+                  ),
+                ),
+                if (lost.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    "Too big to have been saved, so these stay as they are: ${lost.join(', ')}",
+                    style: TextStyle(fontSize: 12.5, color: c.warn),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Undo')),
+          ],
+        ),
+      ) ??
+      false;
+  if (ok) SafeFixes.instance.undo(f);
+}
+
 /// True when a shell command writes to a file by itself.
 bool writesFile(String command) => RegExp(r'>|\bsed\s+-i|\btee\b|\bperl\s+-[a-z]*i').hasMatch(command);
 
@@ -36,6 +90,37 @@ class _SmartBarState extends State<SmartBar> {
   int _seenErrors = 0;
   AgentRun? _agentRun;
 
+  @override
+  void initState() {
+    super.initState();
+    SafeFixes.instance.addListener(_safeChanged);
+  }
+
+  @override
+  void dispose() {
+    SafeFixes.instance.removeListener(_safeChanged);
+    super.dispose();
+  }
+
+  void _safeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// A fix is running: nothing else may start, or the two would be mixed up
+  /// in one undo.
+  bool get _protecting => SafeFixes.instance.latest(widget.projectPath)?.state == SafeFixState.running;
+
+  /// Everything that changes the project goes through here.
+  Future<void> _guarded(String title, Future<int?> Function() action) async {
+    final log = widget.log;
+    await SafeFixes.instance.guard(
+      title,
+      widget.projectPath,
+      action,
+      say: (text, bad) => log(text, bad ? LogLevel.warn : LogLevel.system),
+    );
+  }
+
   Future<void> _fixWithAgent(Agent a) async {
     final c = C.of(context);
     final ok =
@@ -48,7 +133,7 @@ class _SmartBarState extends State<SmartBar> {
               width: 440,
               child: Text(
                 '${a.name} gets the end of this log and edits files in ${widget.projectPath} to fix it. '
-                'You see everything it does here, and can undo the files it changes.',
+                'You see everything it does here. A copy of the project is saved first, so you can undo it.',
                 style: TextStyle(fontSize: 13, height: 1.4, color: c.muted),
               ),
             ),
@@ -63,7 +148,11 @@ class _SmartBarState extends State<SmartBar> {
     final run = AgentRun(a, widget.projectPath);
     _follow(run, run.log);
     setState(() => _agentRun = run);
-    await run.start(widget.lines);
+    final failure = List<LogLine>.of(widget.lines);
+    await _guarded('Fix with ${a.name}', () async {
+      await run.start(failure);
+      return run.exitCode;
+    });
   }
 
   /// Sends what [source] prints to the log, even after this bar has gone: a
@@ -103,22 +192,26 @@ class _SmartBarState extends State<SmartBar> {
     final job = ShellJob(command, cwd: widget.projectPath);
     setState(() => _runs.add(job));
     _follow(job, job.log);
-    await job.start();
+    await _guarded(command, job.start);
   }
 
   Future<void> _applyFix(Fix f) async {
-    for (final s in f.steps) {
-      if (s.edit != null) {
-        final err = await s.edit!();
-        setState(() => _editMsg = err ?? '${s.label}: done');
-        if (err != null) return;
-      } else if (s.command != null) {
-        final job = ShellJob(s.command!, cwd: widget.projectPath);
-        setState(() => _runs.add(job));
-        _follow(job, job.log);
-        if (await job.start() != 0) return;
+    await _guarded(f.title, () async {
+      for (final s in f.steps) {
+        if (s.edit != null) {
+          final err = await s.edit!();
+          if (mounted) setState(() => _editMsg = err ?? '${s.label}: done');
+          if (err != null) return 1;
+        } else if (s.command != null) {
+          final job = ShellJob(s.command!, cwd: widget.projectPath);
+          if (mounted) setState(() => _runs.add(job));
+          _follow(job, job.log);
+          final code = await job.start();
+          if (code != 0) return code;
+        }
       }
-    }
+      return 0;
+    });
   }
 
   Future<void> _ask() async {
@@ -175,6 +268,11 @@ class _SmartBarState extends State<SmartBar> {
                     ),
                   ),
                 Text('In ${widget.projectPath}', style: TextStyle(fontSize: 12, color: c.muted)),
+                const SizedBox(height: 4),
+                Text(
+                  'A copy of the project is saved first, so you can undo this. Anything it changes outside the project can\'t be undone.',
+                  style: TextStyle(fontSize: 12, height: 1.4, color: c.muted),
+                ),
                 const SizedBox(height: 10),
                 Container(
                   width: double.infinity,
@@ -202,10 +300,13 @@ class _SmartBarState extends State<SmartBar> {
     final c = C.of(context);
     final fix = Fixes.find(widget.lines, widget.projectPath);
     final errors = _errors;
-    if (fix == null && errors == 0 && _answer == null && _runs.isEmpty && _agentRun == null) return const SizedBox.shrink();
+    final safe = SafeFixes.instance.latest(widget.projectPath);
+    if (fix == null && errors == 0 && _answer == null && _runs.isEmpty && _agentRun == null && safe == null) {
+      return const SizedBox.shrink();
+    }
     final agent = Agents.instance.current;
     final run = _agentRun;
-    final busy = _runs.any((r) => r.running);
+    final busy = _runs.any((r) => r.running) || _protecting;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -267,7 +368,7 @@ class _SmartBarState extends State<SmartBar> {
                 if (agent != null) ...[
                   const SizedBox(width: 6),
                   OutlinedButton.icon(
-                    onPressed: (run?.running ?? false) ? null : () => _fixWithAgent(agent),
+                    onPressed: busy ? null : () => _fixWithAgent(agent),
                     icon: const Icon(Icons.terminal_rounded, size: 15),
                     label: Text((run?.running ?? false) ? '${agent.name} is working…' : 'Fix with ${agent.name}'),
                   ),
@@ -293,6 +394,7 @@ class _SmartBarState extends State<SmartBar> {
               padding: const EdgeInsets.fromLTRB(39, 0, 12, 10),
               child: Text(_aiError!, style: TextStyle(fontSize: 12.5, color: c.bad)),
             ),
+          if (safe != null) _outcome(c, safe),
           if (_answer != null) _answerView(c, _answer!),
           if (run != null)
             Padding(
@@ -314,23 +416,60 @@ class _SmartBarState extends State<SmartBar> {
                             ),
                           ),
                           TextButton(onPressed: run.showDiff, child: const Text('Show changes')),
-                          TextButton(
-                            onPressed: run.undone ? null : run.undo,
-                            child: Text(run.undone ? 'Undone' : 'Undo', style: TextStyle(color: run.undone ? c.muted : c.bad)),
-                          ),
                         ],
-                      ),
-                    ),
-                  if (!run.running && !run.git)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'This folder isn\'t a git repository, so changes can\'t be listed or undone here.',
-                        style: TextStyle(fontSize: 11.5, color: c.muted),
                       ),
                     ),
                 ],
               ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// How the last fix turned out, with Undo while it can still be undone.
+  Widget _outcome(C c, SafeFix f) {
+    final files = f.changes.all;
+    final names = files.take(3).join(', ') + (files.length > 3 ? ' +${files.length - 3} more' : '');
+    final (IconData icon, Color color, String text) = switch (f.state) {
+      SafeFixState.running => (Icons.shield_outlined, c.muted, 'Project saved. Working…'),
+      SafeFixState.unprotected => (Icons.block_rounded, c.bad, f.error ?? ''),
+      SafeFixState.restored => (Icons.shield_outlined, c.warn, 'That broke ${f.broke}. Your files are back as they were.'),
+      SafeFixState.undone => (Icons.undo_rounded, c.muted, 'Undone. Your files are back as they were.'),
+      SafeFixState.kept when f.error != null => (Icons.error_outline_rounded, c.bad, f.error!),
+      SafeFixState.kept when files.isEmpty => (Icons.info_outline_rounded, c.muted, 'It changed no files.'),
+      SafeFixState.kept when f.addedErrors > 0 => (
+        Icons.warning_amber_rounded,
+        c.warn,
+        'Changed $names, but the analyzer now finds ${f.addedErrors} more errors.',
+      ),
+      SafeFixState.kept => (Icons.check_circle_outline_rounded, c.good, 'Changed $names'),
+    };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 4, 6, 4),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.5, color: c.text),
+            ),
+          ),
+          if (f.canUndo) TextButton(onPressed: () => confirmUndo(context, f), child: const Text('Undo')),
+          if (f.state != SafeFixState.running)
+            IconButton(
+              tooltip: 'Close',
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => SafeFixes.instance.dismiss(widget.projectPath),
+              icon: const Icon(Icons.close_rounded),
             ),
         ],
       ),
@@ -388,9 +527,11 @@ class _SmartBarState extends State<SmartBar> {
                 ),
               ),
               OutlinedButton(
-                onPressed: () async {
-                  if (await _confirm(s.command)) _runCommand(s.command);
-                },
+                onPressed: _protecting
+                    ? null
+                    : () async {
+                        if (await _confirm(s.command)) _runCommand(s.command);
+                      },
                 child: const Text('Run'),
               ),
             ],

@@ -12,6 +12,7 @@ import '../core/fvm.dart';
 import '../core/jobs.dart';
 import '../core/problems.dart';
 import '../core/projects.dart';
+import '../core/safe_fix.dart';
 import '../core/sdk.dart';
 import '../core/sessions.dart';
 import 'create_project.dart';
@@ -25,6 +26,7 @@ import 'side/run_side.dart';
 import 'side/tasks_side.dart';
 import 'theme.dart';
 import 'widgets/palette.dart';
+import 'widgets/smart_bar.dart' show confirmUndo;
 import 'widgets/splitter.dart';
 
 const _window = MethodChannel('deckhand/window');
@@ -138,6 +140,8 @@ class _WorkbenchState extends State<Workbench> {
         }),
         for (final (_, title, args) in TasksSide.tasks) Command(title, 'Tasks', () => TasksSide.run(title, args)),
       ],
+      if (pr != null && (SafeFixes.instance.latest(pr.path)?.canUndo ?? false))
+        Command('Undo the last fix', 'App', () => confirmUndo(context, SafeFixes.instance.latest(pr.path)!)),
       if (live && run.canReload) ...[
         Command('Hot reload', 'App', () => run.reload(), keys: '⌘R'),
         Command('Hot restart', 'App', () => run.reload(full: true), keys: '⇧⌘R'),

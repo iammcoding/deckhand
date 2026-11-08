@@ -57,6 +57,7 @@ class _DoctorPageState extends State<DoctorPage> {
         cwd: Projects.instance.current?.path,
         timeout: const Duration(minutes: 3),
       );
+      if (!mounted) return;
       final checks = _parse('${r.stdout}');
       setState(() {
         _checks = checks;
@@ -68,7 +69,7 @@ class _DoctorPageState extends State<DoctorPage> {
           ]);
       });
     } catch (e) {
-      setState(() => _error = '$e');
+      if (mounted) setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _running = false);
     }

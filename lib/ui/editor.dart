@@ -21,8 +21,8 @@ class EditorArea extends StatelessWidget {
     final c = C.of(context);
     final b = Bench.instance;
     final tab = b.current;
-    return Container(
-      color: c.panel,
+    return Material(
+      type: MaterialType.transparency,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

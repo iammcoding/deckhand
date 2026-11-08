@@ -280,12 +280,14 @@ class _WorkbenchState extends State<Workbench> {
     );
   }
 
-  /// A floating panel: rounded, on the darker window background.
-  Widget _card(C c, Widget child) => Container(
-    decoration: BoxDecoration(
-      color: c.panel,
+  /// A floating panel: rounded, on the darker window background. A Material,
+  /// so hovers and ripples inside it paint on the panel and not underneath it.
+  Widget _card(C c, Widget child) => Material(
+    color: c.panel,
+    surfaceTintColor: Colors.transparent,
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: c.line),
+      side: BorderSide(color: c.line),
     ),
     clipBehavior: Clip.antiAlias,
     child: child,

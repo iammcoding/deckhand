@@ -172,8 +172,8 @@ OS: ${Platform.operatingSystem}.
         final log = _log;
         final pb = Problems.instance;
         final issues = pb.errors + pb.warnings;
-        return Container(
-          color: c.panel,
+        return Material(
+          type: MaterialType.transparency,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

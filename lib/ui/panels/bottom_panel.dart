@@ -31,8 +31,8 @@ class BottomPanel extends StatelessWidget {
       ]),
       builder: (context, _) {
         final pb = Problems.instance;
-        return Container(
-          color: c.panel,
+        return Material(
+          type: MaterialType.transparency,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

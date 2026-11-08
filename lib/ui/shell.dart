@@ -19,7 +19,10 @@ import 'widgets/palette.dart';
 
 class Shell extends StatefulWidget {
   final ValueNotifier<ThemeMode> themeMode;
-  const Shell({super.key, required this.themeMode});
+
+  /// Open on this page (Settings, from the welcome screen's Connect).
+  final int? initialPage;
+  const Shell({super.key, required this.themeMode, this.initialPage});
 
   @override
   State<Shell> createState() => _ShellState();
@@ -58,6 +61,7 @@ class _ShellState extends State<Shell> {
     currentRun.addListener(_runChanged);
     // Start where there's something to do.
     if (Projects.instance.current != null) _page = 1;
+    if (widget.initialPage != null) _page = widget.initialPage!;
     Sdk.instance.version().then((v) {
       if (mounted && v != null) setState(() => _flutter = 'Flutter ${v['frameworkVersion']} · ${v['channel']}');
     });

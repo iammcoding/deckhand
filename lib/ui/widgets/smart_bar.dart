@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/agents.dart';
 import '../../core/ai.dart';
 import '../../core/fixes.dart';
 import '../../core/sdk.dart';
@@ -27,6 +28,35 @@ class _SmartBarState extends State<SmartBar> {
   final List<ShellJob> _runs = [];
   String? _editMsg;
   int _seenErrors = 0;
+  AgentRun? _agentRun;
+
+  Future<void> _fixWithAgent(Agent a) async {
+    final c = C.of(context);
+    final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: c.panel,
+            title: Text('Let ${a.name} fix it?', style: TextStyle(fontSize: 16, color: c.text)),
+            content: SizedBox(
+              width: 440,
+              child: Text(
+                  '${a.name} gets the end of this log and edits files in ${widget.projectPath} to fix it. '
+                  'You see everything it does here, and can undo the files it changes.',
+                  style: TextStyle(fontSize: 13, height: 1.4, color: c.muted)),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text('Fix with ${a.name}')),
+            ],
+          ),
+        ) ??
+        false;
+    if (!ok || !mounted) return;
+    final run = AgentRun(a, widget.projectPath);
+    run.addListener(() => mounted ? setState(() {}) : null);
+    setState(() => _agentRun = run);
+    await run.start(widget.lines);
+  }
 
   int get _errors => widget.lines.where((l) => l.level == LogLevel.error).length;
 
@@ -39,6 +69,7 @@ class _SmartBarState extends State<SmartBar> {
       _aiError = null;
       _runs.clear();
       _editMsg = null;
+      if (!(_agentRun?.running ?? false)) _agentRun = null;
     }
     _seenErrors = _errors;
   }
@@ -121,7 +152,9 @@ class _SmartBarState extends State<SmartBar> {
     final c = C.of(context);
     final fix = Fixes.find(widget.lines, widget.projectPath);
     final errors = _errors;
-    if (fix == null && errors == 0 && _answer == null && _runs.isEmpty) return const SizedBox.shrink();
+    if (fix == null && errors == 0 && _answer == null && _runs.isEmpty && _agentRun == null) return const SizedBox.shrink();
+    final agent = Agents.instance.current;
+    final run = _agentRun;
     final busy = _runs.any((r) => r.running);
 
     return Container(
@@ -166,6 +199,14 @@ class _SmartBarState extends State<SmartBar> {
                 onPressed: busy ? null : () => _applyFix(fix),
                 child: Text(fix.steps.length == 1 ? fix.steps.first.label : 'Fix'),
               ),
+            if (agent != null) ...[
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                onPressed: (run?.running ?? false) ? null : () => _fixWithAgent(agent),
+                icon: const Icon(Icons.terminal_rounded, size: 15),
+                label: Text((run?.running ?? false) ? '${agent.name} is working…' : 'Fix with ${agent.name}'),
+              ),
+            ],
             const SizedBox(width: 6),
             OutlinedButton.icon(
               onPressed: _asking ? null : _ask,
@@ -187,6 +228,34 @@ class _SmartBarState extends State<SmartBar> {
             child: Text(_aiError!, style: TextStyle(fontSize: 12.5, color: c.bad)),
           ),
         if (_answer != null) _answerView(c, _answer!),
+        if (run != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SizedBox(height: 200, child: LogView(lines: run.log)),
+              if (!run.running && run.git && run.changed.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(run.changed.take(4).join(', ') + (run.changed.length > 4 ? ' +${run.changed.length - 4}' : ''),
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: mono.copyWith(fontSize: 11.5, color: c.muted)),
+                    ),
+                    TextButton(onPressed: run.showDiff, child: const Text('Show changes')),
+                    TextButton(
+                      onPressed: run.undone ? null : run.undo,
+                      child: Text(run.undone ? 'Undone' : 'Undo', style: TextStyle(color: run.undone ? c.muted : c.bad)),
+                    ),
+                  ]),
+                ),
+              if (!run.running && !run.git)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text('This folder isn\'t a git repository, so changes can\'t be listed or undone here.',
+                      style: TextStyle(fontSize: 11.5, color: c.muted)),
+                ),
+            ]),
+          ),
         if (_runs.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),

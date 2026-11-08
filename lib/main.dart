@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/agents.dart';
 import 'core/ai.dart';
 import 'core/devices.dart';
 import 'core/projects.dart';
@@ -38,6 +39,7 @@ class _DeckhandState extends State<Deckhand> {
     await Sdk.instance.init();
     await Projects.instance.load();
     await Ai.instance.load();
+    await Agents.instance.load();
     Devices.instance.watch();
     final prefs = await SharedPreferences.getInstance();
     // First launch, or nothing to open yet: the welcome screen.

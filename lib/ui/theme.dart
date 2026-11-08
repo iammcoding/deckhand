@@ -54,7 +54,7 @@ ThemeData buildTheme(Brightness b) {
   return base.copyWith(
     scaffoldBackgroundColor: c.bg,
     dividerColor: c.line,
-    textTheme: base.textTheme.apply(bodyColor: c.text, displayColor: c.text, fontSizeFactor: 0.95),
+    textTheme: base.textTheme.apply(bodyColor: c.text, displayColor: c.text),
     iconTheme: IconThemeData(color: c.muted, size: 18),
     tooltipTheme: TooltipThemeData(
       decoration: BoxDecoration(color: c.raised, borderRadius: BorderRadius.circular(6), border: Border.all(color: c.line)),

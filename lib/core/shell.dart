@@ -34,8 +34,12 @@ class ShellJob extends ChangeNotifier {
     try {
       final p = Platform.isWindows
           ? await Process.start('cmd', ['/c', cmd], workingDirectory: cwd, environment: Sdk.instance.env)
-          : await Process.start(Platform.environment['SHELL'] ?? '/bin/zsh', ['-lc', cmd],
-              workingDirectory: cwd, environment: Sdk.instance.env);
+          : await Process.start(
+              Platform.environment['SHELL'] ?? '/bin/zsh',
+              ['-lc', cmd],
+              workingDirectory: cwd,
+              environment: Sdk.instance.env,
+            );
       _p = p;
       notifyListeners();
       p.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => _add(l, Job.guess(l)));

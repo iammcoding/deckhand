@@ -32,7 +32,8 @@ class _SmartBarState extends State<SmartBar> {
 
   Future<void> _fixWithAgent(Agent a) async {
     final c = C.of(context);
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             backgroundColor: c.panel,
@@ -40,9 +41,10 @@ class _SmartBarState extends State<SmartBar> {
             content: SizedBox(
               width: 440,
               child: Text(
-                  '${a.name} gets the end of this log and edits files in ${widget.projectPath} to fix it. '
-                  'You see everything it does here, and can undo the files it changes.',
-                  style: TextStyle(fontSize: 13, height: 1.4, color: c.muted)),
+                '${a.name} gets the end of this log and edits files in ${widget.projectPath} to fix it. '
+                'You see everything it does here, and can undo the files it changes.',
+                style: TextStyle(fontSize: 13, height: 1.4, color: c.muted),
+              ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -128,16 +130,24 @@ class _SmartBarState extends State<SmartBar> {
           builder: (ctx) => AlertDialog(
             backgroundColor: c.panel,
             title: Text('Run this?', style: TextStyle(fontSize: 16, color: c.text)),
-            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('In ${widget.projectPath}', style: TextStyle(fontSize: 12, color: c.muted)),
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(5), border: Border.all(color: c.line)),
-                child: SelectableText(command, style: mono.copyWith(color: c.text)),
-              ),
-            ]),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('In ${widget.projectPath}', style: TextStyle(fontSize: 12, color: c.muted)),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: c.bg,
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: c.line),
+                  ),
+                  child: SelectableText(command, style: mono.copyWith(color: c.text)),
+                ),
+              ],
+            ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
               FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Run')),
@@ -164,129 +174,178 @@ class _SmartBarState extends State<SmartBar> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: (fix != null ? c.warn : c.bad).withValues(alpha: 0.45)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Icon(fix != null ? Icons.build_circle_outlined : Icons.error_outline_rounded,
-                  size: 17, color: fix != null ? c.warn : c.bad),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(fix?.title ?? '$errors ${errors == 1 ? 'error' : 'errors'} in this log',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text)),
-                const SizedBox(height: 2),
-                Text(
-                    fix?.detail ??
-                        (Ai.instance.connected
-                            ? 'Ask the AI to read the log and suggest a fix.'
-                            : 'Connect an AI model in Settings and it can read the log and suggest a fix.'),
-                    style: TextStyle(fontSize: 12.5, color: c.muted)),
-                if (fix != null) ...[
-                  const SizedBox(height: 6),
-                  for (final s in fix.steps)
-                    Text(s.command != null ? '› ${s.command}' : '› ${s.label}',
-                        style: mono.copyWith(fontSize: 11.5, color: c.muted)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(
+                    fix != null ? Icons.build_circle_outlined : Icons.error_outline_rounded,
+                    size: 17,
+                    color: fix != null ? c.warn : c.bad,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fix?.title ?? '$errors ${errors == 1 ? 'error' : 'errors'} in this log',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        fix?.detail ??
+                            (Ai.instance.connected
+                                ? 'Ask the AI to read the log and suggest a fix.'
+                                : 'Connect an AI model in Settings and it can read the log and suggest a fix.'),
+                        style: TextStyle(fontSize: 12.5, color: c.muted),
+                      ),
+                      if (fix != null) ...[
+                        const SizedBox(height: 6),
+                        for (final s in fix.steps)
+                          Text(
+                            s.command != null ? '› ${s.command}' : '› ${s.label}',
+                            style: mono.copyWith(fontSize: 11.5, color: c.muted),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                if (fix != null)
+                  FilledButton(
+                    onPressed: busy ? null : () => _applyFix(fix),
+                    child: Text(fix.steps.length == 1 ? fix.steps.first.label : 'Fix'),
+                  ),
+                if (agent != null) ...[
+                  const SizedBox(width: 6),
+                  OutlinedButton.icon(
+                    onPressed: (run?.running ?? false) ? null : () => _fixWithAgent(agent),
+                    icon: const Icon(Icons.terminal_rounded, size: 15),
+                    label: Text((run?.running ?? false) ? '${agent.name} is working…' : 'Fix with ${agent.name}'),
+                  ),
                 ],
-              ]),
-            ),
-            const SizedBox(width: 10),
-            if (fix != null)
-              FilledButton(
-                onPressed: busy ? null : () => _applyFix(fix),
-                child: Text(fix.steps.length == 1 ? fix.steps.first.label : 'Fix'),
-              ),
-            if (agent != null) ...[
-              const SizedBox(width: 6),
-              OutlinedButton.icon(
-                onPressed: (run?.running ?? false) ? null : () => _fixWithAgent(agent),
-                icon: const Icon(Icons.terminal_rounded, size: 15),
-                label: Text((run?.running ?? false) ? '${agent.name} is working…' : 'Fix with ${agent.name}'),
-              ),
-            ],
-            const SizedBox(width: 6),
-            OutlinedButton.icon(
-              onPressed: _asking ? null : _ask,
-              icon: _asking
-                  ? SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: c.muted))
-                  : const Icon(Icons.auto_awesome_outlined, size: 15),
-              label: Text(_asking ? 'Reading…' : 'Ask AI'),
-            ),
-          ]),
-        ),
-        if (_editMsg != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(39, 0, 12, 8),
-            child: Text(_editMsg!, style: TextStyle(fontSize: 12, color: c.text)),
-          ),
-        if (_aiError != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(39, 0, 12, 10),
-            child: Text(_aiError!, style: TextStyle(fontSize: 12.5, color: c.bad)),
-          ),
-        if (_answer != null) _answerView(c, _answer!),
-        if (run != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              SizedBox(height: 200, child: LogView(lines: run.log)),
-              if (!run.running && run.git && run.changed.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(children: [
-                    Expanded(
-                      child: Text(run.changed.take(4).join(', ') + (run.changed.length > 4 ? ' +${run.changed.length - 4}' : ''),
-                          maxLines: 1, overflow: TextOverflow.ellipsis, style: mono.copyWith(fontSize: 11.5, color: c.muted)),
-                    ),
-                    TextButton(onPressed: run.showDiff, child: const Text('Show changes')),
-                    TextButton(
-                      onPressed: run.undone ? null : run.undo,
-                      child: Text(run.undone ? 'Undone' : 'Undo', style: TextStyle(color: run.undone ? c.muted : c.bad)),
-                    ),
-                  ]),
+                const SizedBox(width: 6),
+                OutlinedButton.icon(
+                  onPressed: _asking ? null : _ask,
+                  icon: _asking
+                      ? SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: c.muted))
+                      : const Icon(Icons.auto_awesome_outlined, size: 15),
+                  label: Text(_asking ? 'Reading…' : 'Ask AI'),
                 ),
-              if (!run.running && !run.git)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text('This folder isn\'t a git repository, so changes can\'t be listed or undone here.',
-                      style: TextStyle(fontSize: 11.5, color: c.muted)),
-                ),
-            ]),
+              ],
+            ),
           ),
-        if (_runs.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: SizedBox(height: 160, child: LogView(lines: [for (final r in _runs) ...r.log])),
-          ),
-      ]),
+          if (_editMsg != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(39, 0, 12, 8),
+              child: Text(_editMsg!, style: TextStyle(fontSize: 12, color: c.text)),
+            ),
+          if (_aiError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(39, 0, 12, 10),
+              child: Text(_aiError!, style: TextStyle(fontSize: 12.5, color: c.bad)),
+            ),
+          if (_answer != null) _answerView(c, _answer!),
+          if (run != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(height: 200, child: LogView(lines: run.log)),
+                  if (!run.running && run.git && run.changed.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              run.changed.take(4).join(', ') + (run.changed.length > 4 ? ' +${run.changed.length - 4}' : ''),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: mono.copyWith(fontSize: 11.5, color: c.muted),
+                            ),
+                          ),
+                          TextButton(onPressed: run.showDiff, child: const Text('Show changes')),
+                          TextButton(
+                            onPressed: run.undone ? null : run.undo,
+                            child: Text(run.undone ? 'Undone' : 'Undo', style: TextStyle(color: run.undone ? c.muted : c.bad)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (!run.running && !run.git)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'This folder isn\'t a git repository, so changes can\'t be listed or undone here.',
+                        style: TextStyle(fontSize: 11.5, color: c.muted),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (_runs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: SizedBox(height: 160, child: LogView(lines: [for (final r in _runs) ...r.log])),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _answerView(C c, AiAnswer a) => Container(
-        margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(5), border: Border.all(color: c.line)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
+    margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: c.bg,
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: c.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
             Icon(Icons.auto_awesome_outlined, size: 14, color: c.accent),
             const SizedBox(width: 6),
-            Expanded(child: Text(a.summary, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text))),
-          ]),
-          const SizedBox(height: 6),
-          SelectableText(a.cause, style: TextStyle(fontSize: 12.5, height: 1.45, color: c.muted)),
-          for (final s in a.steps) ...[
-            const SizedBox(height: 10),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: Text(
+                a.summary,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        SelectableText(a.cause, style: TextStyle(fontSize: 12.5, height: 1.45, color: c.muted)),
+        for (final s in a.steps) ...[
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(s.title, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text)),
-                  const SizedBox(height: 2),
-                  SelectableText(s.command, style: mono.copyWith(fontSize: 12, color: c.text)),
-                  Text(s.why, style: TextStyle(fontSize: 11.5, color: c.muted)),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.title,
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text),
+                    ),
+                    const SizedBox(height: 2),
+                    SelectableText(s.command, style: mono.copyWith(fontSize: 12, color: c.text)),
+                    Text(s.why, style: TextStyle(fontSize: 11.5, color: c.muted)),
+                  ],
+                ),
               ),
               OutlinedButton(
                 onPressed: () async {
@@ -294,10 +353,15 @@ class _SmartBarState extends State<SmartBar> {
                 },
                 child: const Text('Run'),
               ),
-            ]),
-          ],
-          const SizedBox(height: 8),
-          Text('AI can be wrong. Check a command before you run it.', style: TextStyle(fontSize: 11, color: c.muted.withValues(alpha: 0.7))),
-        ]),
-      );
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          'AI can be wrong. Check a command before you run it.',
+          style: TextStyle(fontSize: 11, color: c.muted.withValues(alpha: 0.7)),
+        ),
+      ],
+    ),
+  );
 }

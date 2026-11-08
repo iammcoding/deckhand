@@ -48,7 +48,7 @@ class Job extends ChangeNotifier {
   }
 
   Future<int> start() async {
-    add('\$ flutter ${args.join(' ')}', LogLevel.system);
+    add(args.first == 'dart' ? '\$ ${args.join(' ')}' : '\$ flutter ${args.join(' ')}', LogLevel.system);
     try {
       final p = await Sdk.instance.start(args, cwd: cwd);
       _p = p;
@@ -61,15 +61,16 @@ class Job extends ChangeNotifier {
       exitCode = -1;
     }
     ended = DateTime.now();
-    add(exitCode == 0 ? 'Done in ${_fmt(took)}' : 'Stopped with code $exitCode after ${_fmt(took)}',
-        exitCode == 0 ? LogLevel.system : LogLevel.error);
+    add(
+      exitCode == 0 ? 'Done in ${_fmt(took)}' : 'Stopped with code $exitCode after ${_fmt(took)}',
+      exitCode == 0 ? LogLevel.system : LogLevel.error,
+    );
     return exitCode!;
   }
 
   void cancel() => _p?.kill();
 
-  static String _fmt(Duration d) =>
-      d.inMinutes > 0 ? '${d.inMinutes}m ${d.inSeconds % 60}s' : '${d.inSeconds}s';
+  static String _fmt(Duration d) => d.inMinutes > 0 ? '${d.inMinutes}m ${d.inSeconds % 60}s' : '${d.inSeconds}s';
 }
 
 /// `flutter run --machine`: the app on a device, its log, and hot reload,
@@ -161,7 +162,14 @@ class RunSession extends ChangeNotifier {
         notifyListeners();
       case 'daemon.logMessage':
         final level = '${params['level']}';
-        _add('${params['message'] ?? ''}', level == 'error' ? LogLevel.error : level == 'warning' ? LogLevel.warn : LogLevel.info);
+        _add(
+          '${params['message'] ?? ''}',
+          level == 'error'
+              ? LogLevel.error
+              : level == 'warning'
+              ? LogLevel.warn
+              : LogLevel.info,
+        );
       case 'app.stop':
         stopped = true;
         notifyListeners();
@@ -174,9 +182,11 @@ class RunSession extends ChangeNotifier {
     final id = _nextId++;
     final c = Completer<Map<String, dynamic>>();
     _pending[id] = c;
-    p.stdin.writeln(jsonEncode([
-      {'id': id, 'method': method, 'params': params}
-    ]));
+    p.stdin.writeln(
+      jsonEncode([
+        {'id': id, 'method': method, 'params': params},
+      ]),
+    );
     try {
       return await c.future.timeout(const Duration(minutes: 2));
     } catch (_) {
@@ -196,8 +206,12 @@ class RunSession extends ChangeNotifier {
     final res = r?['result'];
     final ok = res is Map && (res['code'] == 0 || res['code'] == null) && r?['error'] == null;
     lastReload = ok ? '${full ? 'Restarted' : 'Reloaded'} in ${sw.elapsedMilliseconds} ms' : null;
-    _add(ok ? lastReload! : '${full ? 'Restart' : 'Reload'} failed: ${res is Map ? res['message'] ?? '' : r?['error'] ?? 'no answer'}',
-        ok ? LogLevel.system : LogLevel.error);
+    _add(
+      ok
+          ? lastReload!
+          : '${full ? 'Restart' : 'Reload'} failed: ${res is Map ? res['message'] ?? '' : r?['error'] ?? 'no answer'}',
+      ok ? LogLevel.system : LogLevel.error,
+    );
   }
 
   Future<void> stop() async {

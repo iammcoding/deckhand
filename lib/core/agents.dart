@@ -23,9 +23,23 @@ class Agent {
 
 const agents = <Agent>[
   Agent('opencode', 'opencode', 'opencode', 'opencode run {prompt}', openSource: true, site: 'opencode.ai'),
-  Agent('aider', 'Aider', 'aider', 'aider --yes-always --no-auto-commits --message {prompt}', openSource: true, site: 'aider.chat'),
+  Agent(
+    'aider',
+    'Aider',
+    'aider',
+    'aider --yes-always --no-auto-commits --message {prompt}',
+    openSource: true,
+    site: 'aider.chat',
+  ),
   Agent('claude', 'Claude Code', 'claude', 'claude -p {prompt} --permission-mode acceptEdits', site: 'claude.com/claude-code'),
-  Agent('gemini', 'Gemini CLI', 'gemini', 'gemini --approval-mode auto_edit -p {prompt}', openSource: true, site: 'github.com/google-gemini/gemini-cli'),
+  Agent(
+    'gemini',
+    'Gemini CLI',
+    'gemini',
+    'gemini --approval-mode auto_edit -p {prompt}',
+    openSource: true,
+    site: 'github.com/google-gemini/gemini-cli',
+  ),
   Agent('codex', 'Codex CLI', 'codex', 'codex exec --full-auto {prompt}', openSource: true, site: 'github.com/openai/codex'),
 ];
 
@@ -108,7 +122,12 @@ class AgentRun extends ChangeNotifier {
   }
 
   Future<Set<String>> _dirty() async {
-    final r = await Process.run('git', ['status', '--porcelain', '-uall'], workingDirectory: projectPath, environment: Sdk.instance.env);
+    final r = await Process.run(
+      'git',
+      ['status', '--porcelain', '-uall'],
+      workingDirectory: projectPath,
+      environment: Sdk.instance.env,
+    );
     if (r.exitCode != 0) return {};
     return {
       for (final l in const LineSplitter().convert('${r.stdout}'))
@@ -133,7 +152,12 @@ ${tail.map((l) => l.text).join('\n')}''';
       _add('${agent.name} was not found.', LogLevel.error);
       return;
     }
-    final r = await Process.run('git', ['rev-parse', '--is-inside-work-tree'], workingDirectory: projectPath, environment: Sdk.instance.env);
+    final r = await Process.run(
+      'git',
+      ['rev-parse', '--is-inside-work-tree'],
+      workingDirectory: projectPath,
+      environment: Sdk.instance.env,
+    );
     git = r.exitCode == 0 && '${r.stdout}'.trim() == 'true';
     if (git) _dirtyBefore = await _dirty();
 
@@ -160,7 +184,11 @@ ${tail.map((l) => l.text).join('\n')}''';
     }
     _add(
       exitCode == 0
-          ? (git ? (changed.isEmpty ? 'Finished. No files changed.' : 'Finished. Changed ${changed.length} file${changed.length == 1 ? '' : 's'}.') : 'Finished.')
+          ? (git
+                ? (changed.isEmpty
+                      ? 'Finished. No files changed.'
+                      : 'Finished. Changed ${changed.length} file${changed.length == 1 ? '' : 's'}.')
+                : 'Finished.')
           : '${agent.name} stopped with code $exitCode.',
       exitCode == 0 ? LogLevel.system : LogLevel.error,
     );
@@ -173,7 +201,14 @@ ${tail.map((l) => l.text).join('\n')}''';
     if (!git || changed.isEmpty) return;
     final r = await Process.run('git', ['diff', '--', ...changed], workingDirectory: projectPath, environment: Sdk.instance.env);
     for (final l in const LineSplitter().convert('${r.stdout}')) {
-      _add(l, l.startsWith('+') && !l.startsWith('+++') ? LogLevel.system : l.startsWith('-') && !l.startsWith('---') ? LogLevel.error : LogLevel.info);
+      _add(
+        l,
+        l.startsWith('+') && !l.startsWith('+++')
+            ? LogLevel.system
+            : l.startsWith('-') && !l.startsWith('---')
+            ? LogLevel.error
+            : LogLevel.info,
+      );
     }
     final untracked = changed.where((f) => !'${r.stdout}'.contains(f)).toList();
     for (final f in untracked) {
@@ -184,7 +219,12 @@ ${tail.map((l) => l.text).join('\n')}''';
   /// Puts back only the files the agent changed (they were clean before).
   Future<void> undo() async {
     if (!git || changed.isEmpty || undone) return;
-    final tracked = await Process.run('git', ['ls-files', '--', ...changed], workingDirectory: projectPath, environment: Sdk.instance.env);
+    final tracked = await Process.run(
+      'git',
+      ['ls-files', '--', ...changed],
+      workingDirectory: projectPath,
+      environment: Sdk.instance.env,
+    );
     final trackedSet = const LineSplitter().convert('${tracked.stdout}').toSet();
     final restore = changed.where(trackedSet.contains).toList();
     if (restore.isNotEmpty) {

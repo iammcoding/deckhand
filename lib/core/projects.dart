@@ -43,7 +43,10 @@ class Project {
       name: field('name').isEmpty ? p.basename(path) : field('name'),
       version: field('version'),
       description: field('description'),
-      platforms: [for (final k in known) if (Directory(p.join(path, k)).existsSync()) k],
+      platforms: [
+        for (final k in known)
+          if (Directory(p.join(path, k)).existsSync()) k,
+      ],
       openedAt: openedAt ?? DateTime.now(),
     );
   }

@@ -15,12 +15,12 @@ class Device {
   const Device({required this.id, required this.name, required this.platform, this.emulator = false, this.sdk = ''});
 
   factory Device.fromJson(Map m) => Device(
-        id: '${m['id']}',
-        name: '${m['name']}',
-        platform: '${m['targetPlatform'] ?? ''}',
-        emulator: m['emulator'] == true,
-        sdk: '${m['sdk'] ?? ''}',
-      );
+    id: '${m['id']}',
+    name: '${m['name']}',
+    platform: '${m['targetPlatform'] ?? ''}',
+    emulator: m['emulator'] == true,
+    sdk: '${m['sdk'] ?? ''}',
+  );
 
   /// android, ios, macos, windows, linux, web.
   String get family {
@@ -62,9 +62,7 @@ class Devices extends ChangeNotifier {
       final r = await Sdk.instance.run(['devices', '--machine'], timeout: const Duration(seconds: 60));
       final out = '${r.stdout}';
       final start = out.indexOf('[');
-      list = start < 0
-          ? const []
-          : (jsonDecode(out.substring(start)) as List).whereType<Map>().map(Device.fromJson).toList();
+      list = start < 0 ? const [] : (jsonDecode(out.substring(start)) as List).whereType<Map>().map(Device.fromJson).toList();
       error = null;
       if (selectedId != null && list.every((d) => d.id != selectedId)) selectedId = null;
     } catch (e) {

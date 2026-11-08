@@ -51,7 +51,8 @@ class Fixes {
 
     // Android's minimum SDK is lower than a plugin needs.
     (t, pr) {
-      final m = RegExp(r'minSdkVersion (\d+) cannot be smaller than version (\d+)').firstMatch(t) ??
+      final m =
+          RegExp(r'minSdkVersion (\d+) cannot be smaller than version (\d+)').firstMatch(t) ??
           RegExp(r'requires a higher (?:Android SDK|minSdk)[^\d]*(\d+)?[^\d]*(\d+)').firstMatch(t);
       if (m == null) return null;
       final need = m.group(2) ?? m.group(1);
@@ -78,7 +79,8 @@ class Fixes {
 
     // Pods out of date or a pod version mismatch.
     (t, pr) {
-      if (!RegExp(r"CocoaPods could not find compatible versions|out-of-date source repos|pod repo update|Podfile\.lock").hasMatch(t)) {
+      if (!RegExp(r"CocoaPods could not find compatible versions|out-of-date source repos|pod repo update|Podfile\.lock")
+          .hasMatch(t)) {
         return null;
       }
       final dir = t.contains('macos/') && !t.contains('ios/') ? 'macos' : 'ios';
@@ -91,7 +93,8 @@ class Fixes {
 
     // Gradle or build cache trouble.
     (t, pr) {
-      if (!RegExp(r"Could not resolve all (?:files|dependencies)|Execution failed for task ':app:|Gradle task assemble\w* failed").hasMatch(t)) {
+      if (!RegExp(r"Could not resolve all (?:files|dependencies)|Execution failed for task ':app:|Gradle task assemble\w* failed")
+          .hasMatch(t)) {
         return null;
       }
       return const Fix(
@@ -113,14 +116,13 @@ class Fixes {
 
     // Packages not fetched.
     (t, pr) {
-      if (!RegExp(r"Target of URI doesn't exist: 'package:|pubspec\.lock.*(?:missing|out of date)|Run `(?:flutter )?pub get`").hasMatch(t)) {
+      if (!RegExp(r"Target of URI doesn't exist: 'package:|pubspec\.lock.*(?:missing|out of date)|Run `(?:flutter )?pub get`")
+          .hasMatch(t)) {
         return null;
       }
-      return const Fix(
-        'Packages are missing',
-        'Some imported packages are not on this computer yet.',
-        [FixStep('Get packages', command: 'flutter pub get')],
-      );
+      return const Fix('Packages are missing', 'Some imported packages are not on this computer yet.', [
+        FixStep('Get packages', command: 'flutter pub get'),
+      ]);
     },
   ];
 

@@ -47,7 +47,12 @@ class C {
 }
 
 const monoStyle = mono;
-const mono = TextStyle(fontFamily: 'Menlo', fontFamilyFallback: ['Consolas', 'DejaVu Sans Mono', 'monospace'], fontSize: 12.5, height: 1.45);
+const mono = TextStyle(
+  fontFamily: 'Menlo',
+  fontFamilyFallback: ['Consolas', 'DejaVu Sans Mono', 'monospace'],
+  fontSize: 12.5,
+  height: 1.45,
+);
 
 ThemeData buildTheme(Brightness b) {
   final c = b == Brightness.dark ? C.dark : C.light;
@@ -58,7 +63,11 @@ ThemeData buildTheme(Brightness b) {
     textTheme: base.textTheme.apply(bodyColor: c.text, displayColor: c.text),
     iconTheme: IconThemeData(color: c.muted, size: 18),
     tooltipTheme: TooltipThemeData(
-      decoration: BoxDecoration(color: c.raised, borderRadius: BorderRadius.circular(6), border: Border.all(color: c.line)),
+      decoration: BoxDecoration(
+        color: c.raised,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: c.line),
+      ),
       textStyle: TextStyle(color: c.text, fontSize: 12),
       waitDuration: const Duration(milliseconds: 400),
     ),

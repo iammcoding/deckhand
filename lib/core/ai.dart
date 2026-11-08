@@ -57,8 +57,7 @@ class Ai {
 
   String _svc(Provider p) => 'app.deckhand.${p.name}';
 
-  bool get connected =>
-      model.isNotEmpty && (!provider.needsKey || (_keys[provider] ?? '').isNotEmpty);
+  bool get connected => model.isNotEmpty && (!provider.needsKey || (_keys[provider] ?? '').isNotEmpty);
 
   bool hasKey(Provider p) => (_keys[p] ?? '').isNotEmpty;
 
@@ -135,29 +134,38 @@ class Ai {
     String u(String path) => '${url.endsWith('/') ? url.substring(0, url.length - 1) : url}$path';
     try {
       final (Uri uri, Map<String, String> h) = switch (p) {
-        Provider.anthropic => (Uri.parse('https://api.anthropic.com/v1/models?limit=100'), {'x-api-key': key, 'anthropic-version': '2026-10-21'}),
+        Provider.anthropic => (
+          Uri.parse('https://api.anthropic.com/v1/models?limit=100'),
+          {'x-api-key': key, 'anthropic-version': '2026-10-21'},
+        ),
         Provider.openai => (Uri.parse('https://api.openai.com/v1/models'), {'authorization': 'Bearer $key'}),
-        Provider.gemini => (Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$key&pageSize=200'), <String, String>{}),
+        Provider.gemini => (
+          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models?key=$key&pageSize=200'),
+          <String, String>{},
+        ),
         Provider.openrouter => (Uri.parse('https://openrouter.ai/api/v1/models'), {'authorization': 'Bearer $key'}),
         Provider.ollama => (Uri.parse(u('/api/tags')), <String, String>{}),
         Provider.custom => (Uri.parse(u('/models')), key.isEmpty ? <String, String>{} : {'authorization': 'Bearer $key'}),
       };
       final r = await http.get(uri, headers: h).timeout(const Duration(seconds: 20));
-      if (r.statusCode >= 400) throw AiError('${p.label} answered ${r.statusCode}. Check the key${p.hasUrl ? ' and address' : ''}.');
+      if (r.statusCode >= 400)
+        throw AiError('${p.label} answered ${r.statusCode}. Check the key${p.hasUrl ? ' and address' : ''}.');
       final j = jsonDecode(utf8.decode(r.bodyBytes));
       final List<String> ids = switch (p) {
         Provider.gemini => [
-            for (final m in (j['models'] as List? ?? const []))
-              if ((m['supportedGenerationMethods'] as List? ?? const []).contains('generateContent'))
-                '${m['name']}'.replaceFirst('models/', ''),
-          ],
+          for (final m in (j['models'] as List? ?? const []))
+            if ((m['supportedGenerationMethods'] as List? ?? const []).contains('generateContent'))
+              '${m['name']}'.replaceFirst('models/', ''),
+        ],
         Provider.ollama => [for (final m in (j['models'] as List? ?? const [])) '${m['name']}'],
         _ => [for (final m in (j['data'] as List? ?? const [])) '${m['id']}'],
       };
       ids.sort();
       return ids;
     } on SocketException {
-      throw AiError(p == Provider.ollama ? 'Ollama is not running. Start it, or install it from ollama.com.' : "Couldn't reach ${p.label}.");
+      throw AiError(
+        p == Provider.ollama ? 'Ollama is not running. Start it, or install it from ollama.com.' : "Couldn't reach ${p.label}.",
+      );
     }
   }
 
@@ -200,7 +208,8 @@ Answer with JSON only: {"summary": string, "cause": string, "steps": [{"title": 
     try {
       pubspec = await File('$projectPath/pubspec.yaml').readAsString();
     } catch (_) {}
-    final user = '''
+    final user =
+        '''
 OS: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}
 Flutter: ${flutterVersion ?? 'unknown'}
 
@@ -227,16 +236,13 @@ ${tail.map((l) => l.text).join('\n')}''';
     // Local models sometimes wrap the JSON in prose or a code fence.
     final start = text.indexOf('{');
     final end = text.lastIndexOf('}');
-    if (start < 0 || end <= start) throw AiError('The model didn\'t answer in the expected format. Try again or pick another model.');
+    if (start < 0 || end <= start)
+      throw AiError('The model didn\'t answer in the expected format. Try again or pick another model.');
     final j = jsonDecode(text.substring(start, end + 1)) as Map;
-    return AiAnswer(
-      '${j['summary'] ?? ''}',
-      '${j['cause'] ?? ''}',
-      [
-        for (final s in (j['steps'] as List? ?? const []))
-          if (s is Map) (title: '${s['title']}', command: '${s['command']}', why: '${s['why'] ?? ''}'),
-      ],
-    );
+    return AiAnswer('${j['summary'] ?? ''}', '${j['cause'] ?? ''}', [
+      for (final s in (j['steps'] as List? ?? const []))
+        if (s is Map) (title: '${s['title']}', command: '${s['command']}', why: '${s['why'] ?? ''}'),
+    ]);
   }
 
   Never _fail(http.Response r) {
@@ -326,7 +332,9 @@ ${tail.map((l) => l.text).join('\n')}''';
   Future<String> _gemini(String user) async {
     final r = await http
         .post(
-          Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${_keys[Provider.gemini]}'),
+          Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${_keys[Provider.gemini]}',
+          ),
           headers: {'content-type': 'application/json'},
           body: jsonEncode({
             'systemInstruction': {
@@ -373,5 +381,141 @@ ${tail.map((l) => l.text).join('\n')}''';
     if (r.statusCode >= 400) _fail(r);
     final b = jsonDecode(utf8.decode(r.bodyBytes));
     return '${b['message']?['content'] ?? ''}';
+  }
+
+  // ---- Chat ----------------------------------------------------------------
+
+  /// A free conversation, streamed: yields the answer's text as it arrives.
+  /// Cancelling the subscription closes the connection.
+  Stream<String> chat({required String system, required List<({bool user, String text})> messages}) async* {
+    if (!connected) throw AiError('Connect an AI model in Settings first.');
+    final client = http.Client();
+    try {
+      final req = _chatRequest(system, messages);
+      final http.StreamedResponse res;
+      try {
+        res = await client.send(req).timeout(const Duration(minutes: 2));
+      } on SocketException {
+        throw AiError(provider == Provider.ollama ? 'Ollama is not running.' : "Couldn't reach ${provider.label}.");
+      }
+      if (res.statusCode >= 400) _fail(await http.Response.fromStream(res));
+      final lines = res.stream.transform(utf8.decoder).transform(const LineSplitter());
+      await for (final line in lines) {
+        final t = _chatDelta(line);
+        if (t != null && t.isNotEmpty) yield t;
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  http.Request _chatRequest(String system, List<({bool user, String text})> messages) {
+    http.Request post(String url, Map<String, String> headers, Object body) => http.Request('POST', Uri.parse(url))
+      ..headers.addAll({'content-type': 'application/json', ...headers})
+      ..body = jsonEncode(body);
+    final turns = [for (final m in messages) (role: m.user ? 'user' : 'assistant', text: m.text)];
+    switch (provider) {
+      case Provider.anthropic:
+        return post(
+          'https://api.anthropic.com/v1/messages',
+          {
+            'x-api-key': _keys[Provider.anthropic]!,
+            'anthropic-version': '2026-10-21',
+            'anthropic-beta': 'server-side-fallback-2026-07-01',
+          },
+          {
+            'model': model,
+            'max_tokens': 16000,
+            'stream': true,
+            'fallbacks': 'default',
+            'system': system,
+            'thinking': {'type': 'adaptive'},
+            'output_config': {'effort': 'medium'},
+            'messages': [
+              for (final t in turns) {'role': t.role, 'content': t.text},
+            ],
+          },
+        );
+      case Provider.gemini:
+        return post(
+          'https://generativelanguage.googleapis.com/v1beta/models/$model:streamGenerateContent?alt=sse&key=${_keys[Provider.gemini]}',
+          const {},
+          {
+            'systemInstruction': {
+              'parts': [
+                {'text': system},
+              ],
+            },
+            'contents': [
+              for (final t in turns)
+                {
+                  'role': t.role == 'user' ? 'user' : 'model',
+                  'parts': [
+                    {'text': t.text},
+                  ],
+                },
+            ],
+          },
+        );
+      case Provider.ollama:
+        return post(_url('/api/chat'), const {}, {
+          'model': model,
+          'stream': true,
+          'messages': [
+            {'role': 'system', 'content': system},
+            for (final t in turns) {'role': t.role, 'content': t.text},
+          ],
+        });
+      case Provider.openai:
+      case Provider.openrouter:
+      case Provider.custom:
+        final (url, key) = switch (provider) {
+          Provider.openai => ('https://api.openai.com/v1/chat/completions', _keys[Provider.openai] ?? ''),
+          Provider.openrouter => ('https://openrouter.ai/api/v1/chat/completions', _keys[Provider.openrouter] ?? ''),
+          _ => (_url('/chat/completions'), _keys[Provider.custom] ?? ''),
+        };
+        return post(
+          url,
+          {if (key.isNotEmpty) 'authorization': 'Bearer $key', if (provider == Provider.openrouter) 'X-Title': 'Deckhand'},
+          {
+            'model': model,
+            'stream': true,
+            'messages': [
+              {'role': 'system', 'content': system},
+              for (final t in turns) {'role': t.role, 'content': t.text},
+            ],
+          },
+        );
+    }
+  }
+
+  /// The text in one line of a streamed answer, if it has any.
+  String? _chatDelta(String line) {
+    if (provider == Provider.ollama) {
+      if (line.trim().isEmpty) return null;
+      final j = jsonDecode(line);
+      if (j['error'] != null) throw AiError('${j['error']}');
+      return '${j['message']?['content'] ?? ''}';
+    }
+    if (!line.startsWith('data:')) return null;
+    final data = line.substring(5).trim();
+    if (data.isEmpty || data == '[DONE]') return null;
+    final j = jsonDecode(data);
+    if (j is! Map) return null;
+    switch (provider) {
+      case Provider.anthropic:
+        if (j['type'] == 'error') throw AiError('${j['error']?['message'] ?? 'The answer stopped with an error.'}');
+        if (j['type'] == 'message_delta' && j['delta']?['stop_reason'] == 'refusal') {
+          throw AiError('The model declined to answer this one.');
+        }
+        if (j['type'] == 'content_block_delta' && j['delta']?['type'] == 'text_delta') return '${j['delta']['text']}';
+        return null;
+      case Provider.gemini:
+        final parts = j['candidates']?[0]?['content']?['parts'] as List? ?? const [];
+        return parts.map((p) => '${p['text'] ?? ''}').join();
+      default:
+        if (j['error'] != null) throw AiError('${j['error'] is Map ? j['error']['message'] : j['error']}');
+        return '${j['choices']?[0]?['delta']?['content'] ?? ''}';
+    }
   }
 }

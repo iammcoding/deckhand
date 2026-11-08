@@ -3,12 +3,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/agents.dart';
 import 'core/ai.dart';
+import 'core/bench.dart';
 import 'core/devices.dart';
 import 'core/projects.dart';
 import 'core/sdk.dart';
-import 'ui/shell.dart';
 import 'ui/theme.dart';
 import 'ui/welcome.dart';
+import 'ui/workbench.dart';
 
 /// Deckhand: a desktop app for Flutter work. Open a project, run it on a
 /// device with hot reload and its log, build it, check your setup.
@@ -33,7 +34,6 @@ class _DeckhandState extends State<Deckhand> {
   /// window opens on a splash instead of staying blank.
   late final Future<void> _boot = _start();
   bool _welcome = false;
-  int? _startPage;
 
   Future<void> _start() async {
     await Sdk.instance.init();
@@ -41,6 +41,7 @@ class _DeckhandState extends State<Deckhand> {
     await Ai.instance.load();
     await Agents.instance.load();
     Devices.instance.watch();
+    await Bench.instance.load();
     final prefs = await SharedPreferences.getInstance();
     // First launch, or nothing to open yet: the welcome screen.
     _welcome = prefs.getBool('welcome_done') != true || Projects.instance.recent.isEmpty;
@@ -70,12 +71,12 @@ class _DeckhandState extends State<Deckhand> {
               return Welcome(
                 onDone: _finishWelcome,
                 onOpenSettings: () {
-                  _startPage = 6;
+                  Bench.instance.open(const EditorTab(TabKind.settings));
                   _finishWelcome();
                 },
               );
             }
-            return Shell(themeMode: widget.themeMode, initialPage: _startPage);
+            return Workbench(themeMode: widget.themeMode);
           },
         ),
       ),

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Finding and running the Flutter tool.
@@ -41,8 +43,7 @@ class Sdk {
     if (Platform.isWindows) return;
     try {
       final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-      final r = await Process.run(shell, ['-lc', 'echo \$PATH'])
-          .timeout(const Duration(seconds: 8));
+      final r = await Process.run(shell, ['-lc', 'echo \$PATH']).timeout(const Duration(seconds: 8));
       final path = '${r.stdout}'.trim();
       if (path.isNotEmpty) env = {...Platform.environment, 'PATH': path};
     } catch (_) {}
@@ -52,14 +53,14 @@ class Sdk {
     try {
       if (Platform.isWindows) {
         final r = await Process.run('where', ['flutter'], runInShell: true);
-        final first = '${r.stdout}'.split(RegExp(r'\r?\n')).map((l) => l.trim()).firstWhere(
-            (l) => l.toLowerCase().endsWith('flutter.bat'),
-            orElse: () => '');
+        final first = '${r.stdout}'
+            .split(RegExp(r'\r?\n'))
+            .map((l) => l.trim())
+            .firstWhere((l) => l.toLowerCase().endsWith('flutter.bat'), orElse: () => '');
         return first.isEmpty ? null : first;
       }
       final shell = Platform.environment['SHELL'] ?? '/bin/zsh';
-      final r = await Process.run(shell, ['-lc', 'command -v flutter'])
-          .timeout(const Duration(seconds: 8));
+      final r = await Process.run(shell, ['-lc', 'command -v flutter']).timeout(const Duration(seconds: 8));
       final p = '${r.stdout}'.trim();
       return p.isEmpty ? null : p;
     } catch (_) {
@@ -69,25 +70,39 @@ class Sdk {
 
   bool get ready => flutterBin != null;
 
+  /// The dart that ships inside this Flutter SDK.
+  String? get dartBin {
+    final f = flutterBin;
+    if (f == null) return null;
+    final d = p.join(p.dirname(f), Platform.isWindows ? 'dart.bat' : 'dart');
+    return File(d).existsSync() ? d : null;
+  }
+
   /// Start the Flutter tool with [args] in [cwd], streaming its output.
+  /// Args starting with `dart` run that SDK's Dart instead.
   Future<Process> start(List<String> args, {String? cwd}) {
-    final bin = flutterBin;
+    var bin = flutterBin;
+    if (args.isNotEmpty && args.first == 'dart') {
+      bin = dartBin;
+      args = args.sublist(1);
+    }
     if (bin == null) throw StateError('Flutter was not found. Set its path in Settings.');
-    return Process.start(bin, args,
-        workingDirectory: cwd, environment: env, runInShell: Platform.isWindows);
+    return Process.start(bin, args, workingDirectory: cwd, environment: env, runInShell: Platform.isWindows);
   }
 
   /// Run the Flutter tool and collect what it printed.
   Future<ProcessResult> run(List<String> args, {String? cwd, Duration timeout = const Duration(minutes: 3)}) {
     final bin = flutterBin;
     if (bin == null) throw StateError('Flutter was not found. Set its path in Settings.');
-    return Process.run(bin, args,
-            workingDirectory: cwd,
-            environment: env,
-            runInShell: Platform.isWindows,
-            stdoutEncoding: utf8,
-            stderrEncoding: utf8)
-        .timeout(timeout);
+    return Process.run(
+      bin,
+      args,
+      workingDirectory: cwd,
+      environment: env,
+      runInShell: Platform.isWindows,
+      stdoutEncoding: utf8,
+      stderrEncoding: utf8,
+    ).timeout(timeout);
   }
 
   /// `flutter --version --machine`: the SDK's version, channel and Dart.

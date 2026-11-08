@@ -11,12 +11,26 @@ class MainFlutterWindow: NSWindow {
     self.styleMask.insert(.fullSizeContentView)
     self.titlebarAppearsTransparent = true
     self.titleVisibility = .hidden
-    self.isMovableByWindowBackground = true
     self.minSize = NSSize(width: 980, height: 640)
     self.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 820), display: true)
     self.center()
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+
+    // The title bar is drawn by Flutter, so it asks the window to move.
+    let channel = FlutterMethodChannel(name: "deckhand/window", binaryMessenger: flutterViewController.engine.binaryMessenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "drag":
+        if let e = NSApp.currentEvent { self?.performDrag(with: e) }
+        result(nil)
+      case "zoom":
+        self?.zoom(nil)
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
 
     super.awakeFromNib()
   }

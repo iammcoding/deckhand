@@ -13,10 +13,10 @@ class Command {
 
 /// ⌘K: every action, found by typing. Arrows to move, Enter to run, Esc out.
 Future<void> showPalette(BuildContext context, List<Command> commands) => showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.35),
-      builder: (_) => _Palette(commands: commands),
-    );
+  context: context,
+  barrierColor: Colors.black.withValues(alpha: 0.35),
+  builder: (_) => _Palette(commands: commands),
+);
 
 class _Palette extends StatefulWidget {
   final List<Command> commands;
@@ -62,71 +62,86 @@ class _PaletteState extends State<_Palette> {
         color: c.panel,
         elevation: 20,
         shadowColor: Colors.black54,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: c.line)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(color: c.line),
+        ),
         child: SizedBox(
           width: 560,
           child: CallbackShortcuts(
             bindings: {
-              const SingleActivator(LogicalKeyboardKey.arrowDown): () => setState(() => _sel = (_sel + 1).clamp(0, hits.length - 1)),
-              const SingleActivator(LogicalKeyboardKey.arrowUp): () => setState(() => _sel = (_sel - 1).clamp(0, hits.length - 1)),
+              const SingleActivator(LogicalKeyboardKey.arrowDown): () =>
+                  setState(() => _sel = (_sel + 1).clamp(0, hits.length - 1)),
+              const SingleActivator(LogicalKeyboardKey.arrowUp): () =>
+                  setState(() => _sel = (_sel - 1).clamp(0, hits.length - 1)),
               const SingleActivator(LogicalKeyboardKey.enter): () {
                 if (hits.isNotEmpty) _run(hits[_sel]);
               },
             },
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                controller: _q,
-                autofocus: true,
-                onChanged: (_) => setState(() => _sel = 0),
-                style: TextStyle(fontSize: 15, color: c.text),
-                decoration: InputDecoration(
-                  hintText: 'Type a command',
-                  hintStyle: TextStyle(fontSize: 15, color: c.muted),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _q,
+                  autofocus: true,
+                  onChanged: (_) => setState(() => _sel = 0),
+                  style: TextStyle(fontSize: 15, color: c.text),
+                  decoration: InputDecoration(
+                    hintText: 'Type a command',
+                    hintStyle: TextStyle(fontSize: 15, color: c.muted),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                  ),
                 ),
-              ),
-              Divider(height: 1, color: c.line),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
-                child: hits.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Text('No command matches', style: TextStyle(color: c.muted, fontSize: 13)),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        itemCount: hits.length,
-                        itemBuilder: (_, i) {
-                          final h = hits[i];
-                          final on = i == _sel;
-                          return InkWell(
-                            onTap: () => _run(h),
-                            onHover: (v) {
-                              if (v) setState(() => _sel = i);
-                            },
-                            child: Container(
-                              color: on ? c.raised : null,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                              child: Row(children: [
-                                Expanded(child: Text(h.title, style: TextStyle(fontSize: 13.5, color: c.text))),
-                                Text(h.group, style: TextStyle(fontSize: 12, color: c.muted)),
-                                if (h.keys != null) ...[
-                                  const SizedBox(width: 10),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(border: Border.all(color: c.line), borderRadius: BorderRadius.circular(4)),
-                                    child: Text(h.keys!, style: TextStyle(fontSize: 11, color: c.muted)),
-                                  ),
-                                ],
-                              ]),
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ]),
+                Divider(height: 1, color: c.line),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 360),
+                  child: hits.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Text('No command matches', style: TextStyle(color: c.muted, fontSize: 13)),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          itemCount: hits.length,
+                          itemBuilder: (_, i) {
+                            final h = hits[i];
+                            final on = i == _sel;
+                            return InkWell(
+                              onTap: () => _run(h),
+                              onHover: (v) {
+                                if (v) setState(() => _sel = i);
+                              },
+                              child: Container(
+                                color: on ? c.raised : null,
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(h.title, style: TextStyle(fontSize: 13.5, color: c.text)),
+                                    ),
+                                    Text(h.group, style: TextStyle(fontSize: 12, color: c.muted)),
+                                    if (h.keys != null) ...[
+                                      const SizedBox(width: 10),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: c.line),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(h.keys!, style: TextStyle(fontSize: 11, color: c.muted)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

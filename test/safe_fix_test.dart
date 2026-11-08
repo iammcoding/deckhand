@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 const _pubspec = 'name: app\n\nflutter:\n  uses-material-design: true\n';
 
 void main() {
+  _verdicts();
+
   late Directory tmp;
   late String root;
   final safe = SafeFixes.instance;
@@ -232,11 +234,128 @@ void main() {
     });
   });
 
+  test('a fix the check rejects goes back, even though the file still reads', () async {
+    final fix = await safe.guard(
+      'test',
+      root,
+      () async {
+        write('pubspec.yaml', 'name: app\ndev_dependencies:\n  delegates:\n    - nonsense\n');
+        return 0;
+      },
+      checkAnalyzer: false,
+      verify: (changes) async => const Verdict(failed: 'flutter pub get fails'),
+    );
+    expect(fix.state, SafeFixState.restored);
+    expect(fix.failedCheck, contains('pub get'));
+    expect(read('pubspec.yaml'), _pubspec);
+  });
+
+  test('a fix that passes the check stays, and can be undone', () async {
+    final fix = await safe.guard(
+      'test',
+      root,
+      () async {
+        write('lib/main.dart', 'x');
+        return 0;
+      },
+      checkAnalyzer: false,
+      verify: (changes) async => const Verdict(),
+    );
+    expect(fix.state, SafeFixState.kept);
+    expect(fix.canUndo, isTrue);
+  });
+
+  test('if the check itself crashes, the fix stays and that is said', () async {
+    final fix = await safe.guard(
+      'test',
+      root,
+      () async {
+        write('lib/main.dart', 'x');
+        return 0;
+      },
+      checkAnalyzer: false,
+      verify: (changes) async => throw StateError('no flutter'),
+    );
+    expect(fix.state, SafeFixState.kept);
+    expect(fix.note, contains("Couldn't check"));
+  });
+
   test('the last fix is remembered per project, and can be dismissed', () async {
     await guard(() async => 0);
     expect(safe.latest(root), isNotNull);
     expect(safe.latest('/other'), isNull);
     safe.dismiss(root);
     expect(safe.latest(root), isNull);
+  });
+}
+
+ProcessResult _result(int code, [String out = '']) => ProcessResult(1, code, out, '');
+
+void _verdicts() {
+  const pubChange = Changes(modified: ['pubspec.yaml']);
+  const dartChange = Changes(modified: ['lib/main.dart']);
+
+  group('Deckhand checks a fix itself, whatever the AI claims', () {
+    test('the real case: valid YAML, but Flutter crashes on it', () async {
+      final v = await Verdict.check(
+        changes: pubChange,
+        run: (_) async => _result(255, 'Unhandled exception:\nError on line 42: bad dependency\n#0 main'),
+      );
+      expect(v.failed, contains('pub get'));
+      expect(v.failed, contains('bad dependency'));
+    });
+
+    test('no network is not the fix\'s fault', () async {
+      final v = await Verdict.check(
+        changes: pubChange,
+        run: (_) async => _result(69, 'SocketException: Failed host lookup: pub.dev'),
+      );
+      expect(v.failed, isNull);
+    });
+
+    test('the same error coming back means it did not work', () async {
+      final v = await Verdict.check(
+        changes: dartChange,
+        retry: const ['gen-l10n'],
+        failure: Verdict.errorsIn(['Error on line 96, column 1: Duplicate mapping key.']),
+        run: (_) async => _result(1, 'Error on line 96, column 1: Duplicate mapping key.\n'),
+      );
+      expect(v.failed, contains('still fails the same way'));
+    });
+
+    test('a different error is progress: kept, and said out loud', () async {
+      final v = await Verdict.check(
+        changes: dartChange,
+        retry: const ['gen-l10n'],
+        failure: Verdict.errorsIn(['Error on line 96, column 1: Duplicate mapping key.']),
+        run: (_) async => _result(1, 'Error: Cannot find the arb directory\n'),
+      );
+      expect(v.failed, isNull);
+      expect(v.note, contains('fails differently'));
+    });
+
+    test('the command working again is a pass', () async {
+      final v = await Verdict.check(changes: dartChange, retry: const ['gen-l10n'], run: (_) async => _result(0));
+      expect(v.failed, isNull);
+      expect(v.note, isNull);
+    });
+
+    test('slow commands are not retried', () async {
+      var ran = 0;
+      await Verdict.check(
+        changes: dartChange,
+        retry: const ['build', 'apk'],
+        run: (_) async {
+          ran++;
+          return _result(0);
+        },
+      );
+      expect(ran, 0);
+    });
+
+    test('changing nothing is said plainly', () async {
+      final v = await Verdict.check(changes: const Changes(), run: (_) async => _result(0));
+      expect(v.note, contains("didn't change"));
+    });
   });
 }

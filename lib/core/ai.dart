@@ -5,14 +5,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'sessions.dart';
+import 'ai_tools.dart';
 
-/// What the AI says about an error: the cause, and commands to try in order.
-class AiAnswer {
-  final String summary;
-  final String cause;
-  final List<({String title, String command, String why})> steps;
-  const AiAnswer(this.summary, this.cause, this.steps);
+/// One step: what the model said, and the tools it wants run. [native] is
+/// false when it wrote the calls out as text instead of really making them.
+class AiTurn {
+  final String text;
+  final List<AiToolCall> calls;
+  final bool native;
+  const AiTurn(this.text, this.calls, {required this.native});
 }
 
 class AiError implements Exception {
@@ -41,8 +42,7 @@ enum Provider {
   bool get hasUrl => this == ollama || this == custom;
 }
 
-/// "Ask AI" on an error, with whichever model you connect: the log tail and
-/// the pubspec go in, the cause and the commands that fix it come out.
+/// The model you connect, used by Ask AI (through tools, see AiAgent) and chat.
 /// Keys live in the Mac keychain (the system credential store elsewhere),
 /// never in a file.
 class Ai {
@@ -169,82 +169,6 @@ class Ai {
     }
   }
 
-  static const _schema = {
-    'type': 'object',
-    'properties': {
-      'summary': {'type': 'string', 'description': 'One sentence: what went wrong.'},
-      'cause': {'type': 'string', 'description': 'Why it happened and what to change, in a few short sentences.'},
-      'steps': {
-        'type': 'array',
-        'description': 'Shell commands to run from the project root, in order. Empty if the fix is a code change.',
-        'items': {
-          'type': 'object',
-          'properties': {
-            'title': {'type': 'string'},
-            'command': {'type': 'string'},
-            'why': {'type': 'string'},
-          },
-          'required': ['title', 'command', 'why'],
-          'additionalProperties': false,
-        },
-      },
-    },
-    'required': ['summary', 'cause', 'steps'],
-    'additionalProperties': false,
-  };
-
-  static const _system = '''
-You help a Flutter developer fix a failure shown in their run or build log.
-Find the real cause (usually the first error, not the last line), say it plainly, and give up to four shell commands that fix it, run in order from the project root.
-The commands run in the user's own shell after they confirm each one. Never suggest sudo, deleting anything outside build output folders, git reset, or changing global settings unless there is no other way, and say so in "why" when you do.
-If the fix is a change to their code or config, explain exactly what to change in "cause" and leave "steps" empty. Never edit a file with a command (no echo, >>, sed, tee): appending to pubspec.yaml or any YAML file breaks it.
-Write for a developer: short, specific, no filler.
-Answer with JSON only: {"summary": string, "cause": string, "steps": [{"title": string, "command": string, "why": string}]}.''';
-
-  Future<AiAnswer> explain({required List<LogLine> log, required String projectPath, String? flutterVersion}) async {
-    if (!connected) throw AiError('Connect an AI model in Settings first.');
-    final tail = log.length > 160 ? log.sublist(log.length - 160) : log;
-    String pubspec = '';
-    try {
-      pubspec = await File('$projectPath/pubspec.yaml').readAsString();
-    } catch (_) {}
-    final user =
-        '''
-OS: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}
-Flutter: ${flutterVersion ?? 'unknown'}
-
-pubspec.yaml:
-$pubspec
-
-Log (last ${tail.length} lines):
-${tail.map((l) => l.text).join('\n')}''';
-
-    try {
-      final text = switch (provider) {
-        Provider.anthropic => await _anthropic(user),
-        Provider.gemini => await _gemini(user),
-        Provider.ollama => await _ollama(user),
-        _ => await _openaiStyle(user),
-      };
-      return _parse(text);
-    } on SocketException {
-      throw AiError(provider == Provider.ollama ? 'Ollama is not running.' : "Couldn't reach ${provider.label}.");
-    }
-  }
-
-  AiAnswer _parse(String text) {
-    // Local models sometimes wrap the JSON in prose or a code fence.
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start < 0 || end <= start)
-      throw AiError('The model didn\'t answer in the expected format. Try again or pick another model.');
-    final j = jsonDecode(text.substring(start, end + 1)) as Map;
-    return AiAnswer('${j['summary'] ?? ''}', '${j['cause'] ?? ''}', [
-      for (final s in (j['steps'] as List? ?? const []))
-        if (s is Map) (title: '${s['title']}', command: '${s['command']}', why: '${s['why'] ?? ''}'),
-    ]);
-  }
-
   Never _fail(http.Response r) {
     String msg = '';
     try {
@@ -256,131 +180,269 @@ ${tail.map((l) => l.text).join('\n')}''';
     throw AiError('${provider.label} error ${r.statusCode}${msg.isEmpty ? '' : ': $msg'}');
   }
 
-  /// Claude, over the Messages API, with structured output.
-  Future<String> _anthropic(String user) async {
-    final r = await http
-        .post(
-          Uri.parse('https://api.anthropic.com/v1/messages'),
-          headers: {
-            'content-type': 'application/json',
-            'x-api-key': _keys[Provider.anthropic]!,
-            'anthropic-version': '2026-10-21',
-            // On a safety decline the API retries on a fallback model itself.
-            'anthropic-beta': 'server-side-fallback-2026-07-01',
-          },
-          body: jsonEncode({
-            'model': model,
-            'max_tokens': 16000,
-            'fallbacks': 'default',
-            'system': _system,
-            'output_config': {
-              'effort': 'medium',
-              'format': {'type': 'json_schema', 'schema': _schema},
-            },
-            'messages': [
-              {'role': 'user', 'content': user},
-            ],
-          }),
-        )
-        .timeout(const Duration(minutes: 4));
-    if (r.statusCode >= 400) _fail(r);
-    final b = jsonDecode(utf8.decode(r.bodyBytes));
-    if (b['stop_reason'] == 'refusal') throw AiError('The model declined to answer this one.');
-    return [
-      for (final c in (b['content'] as List? ?? const []))
-        if (c is Map && c['type'] == 'text') '${c['text']}',
-    ].join();
+  // ---- Tool use ---------------------------------------------------------------
+
+  /// One step of a conversation with tools: what the model said and the calls
+  /// it wants made. [messages] is in this provider's own format, and grows.
+  Future<AiTurn> turn(String system, List<Map<String, dynamic>> messages, List<AiTool> tools) async {
+    if (!connected) throw AiError('Connect an AI model in Settings first.');
+    final names = {for (final t in tools) t.name};
+    try {
+      final (text, calls, raw) = switch (provider) {
+        Provider.anthropic => await _anthropicTurn(system, messages, tools),
+        Provider.gemini => await _geminiTurn(system, messages, tools),
+        Provider.ollama => await _ollamaTurn(system, messages, tools),
+        _ => await _openaiTurn(system, messages, tools),
+      };
+      messages.add(raw);
+      if (calls.isNotEmpty) return AiTurn(text, calls, native: true);
+      // Some models write the call out instead of making it.
+      final written = ProjectTools.callsInText(text, names);
+      return AiTurn(written.isEmpty ? text : '', written, native: false);
+    } on SocketException {
+      throw AiError(provider == Provider.ollama ? 'Ollama is not running.' : "Couldn't reach ${provider.label}.");
+    }
   }
 
-  /// OpenAI, OpenRouter and any OpenAI-compatible server: chat completions,
-  /// asking for JSON.
-  Future<String> _openaiStyle(String user) async {
+  /// The first message of a conversation, in this provider's format.
+  Map<String, dynamic> userMessage(String text) => provider == Provider.gemini
+      ? {
+          'role': 'user',
+          'parts': [
+            {'text': text},
+          ],
+        }
+      : {'role': 'user', 'content': text};
+
+  /// Tool answers, in this provider's format. Calls the model wrote as text
+  /// have no native answer, so they go back as an ordinary message.
+  List<Map<String, dynamic>> resultMessages(List<AiToolResult> results, {required bool native}) {
+    if (!native) {
+      return [
+        userMessage([for (final r in results) 'Result of ${r.call.name}${r.error ? ' (failed)' : ''}:\n${r.text}'].join('\n\n')),
+      ];
+    }
+    return switch (provider) {
+      Provider.anthropic => [
+        {
+          'role': 'user',
+          'content': [
+            for (final r in results)
+              {'type': 'tool_result', 'tool_use_id': r.call.id, 'content': r.text, if (r.error) 'is_error': true},
+          ],
+        },
+      ],
+      Provider.gemini => [
+        {
+          'role': 'user',
+          'parts': [
+            for (final r in results)
+              {
+                'functionResponse': {
+                  'name': r.call.name,
+                  'response': {r.error ? 'error' : 'result': r.text},
+                },
+              },
+          ],
+        },
+      ],
+      Provider.ollama => [
+        for (final r in results) {'role': 'tool', 'tool_name': r.call.name, 'content': r.text},
+      ],
+      _ => [
+        for (final r in results) {'role': 'tool', 'tool_call_id': r.call.id, 'content': r.text},
+      ],
+    };
+  }
+
+  Future<Map<String, dynamic>> _postJson(String url, Map<String, String> headers, Object body, Duration timeout) async {
+    final r = await http
+        .post(Uri.parse(url), headers: {'content-type': 'application/json', ...headers}, body: jsonEncode(body))
+        .timeout(timeout);
+    if (r.statusCode >= 400) _fail(r);
+    return Map<String, dynamic>.from(jsonDecode(utf8.decode(r.bodyBytes)) as Map);
+  }
+
+  static Map<String, dynamic> _asMap(Object? v) {
+    if (v is Map) return Map<String, dynamic>.from(v);
+    if (v is String) {
+      try {
+        final j = jsonDecode(v);
+        if (j is Map) return Map<String, dynamic>.from(j);
+      } on FormatException {
+        // Not usable: the tool reports what's missing, and the model retries.
+      }
+    }
+    return {};
+  }
+
+  /// Claude. The assistant turn goes back exactly as it came.
+  Future<(String, List<AiToolCall>, Map<String, dynamic>)> _anthropicTurn(
+    String system,
+    List<Map<String, dynamic>> messages,
+    List<AiTool> tools,
+  ) async {
+    final b = await _postJson(
+      'https://api.anthropic.com/v1/messages',
+      {
+        'x-api-key': _keys[Provider.anthropic]!,
+        'anthropic-version': '2026-10-21',
+        'anthropic-beta': 'server-side-fallback-2026-07-01',
+      },
+      {
+        'model': model,
+        'max_tokens': 16000,
+        'fallbacks': 'default',
+        'system': system,
+        'output_config': {'effort': 'medium'},
+        'tools': [
+          for (final t in tools) {'name': t.name, 'description': t.description, 'input_schema': t.schema},
+        ],
+        'messages': messages,
+      },
+      const Duration(minutes: 4),
+    );
+    if (b['stop_reason'] == 'refusal') throw AiError('The model declined to answer this one.');
+    final content = b['content'] as List? ?? const [];
+    return (
+      [
+        for (final c in content)
+          if (c is Map && c['type'] == 'text') '${c['text']}',
+      ].join(),
+      [
+        for (final c in content)
+          if (c is Map && c['type'] == 'tool_use') AiToolCall('${c['id']}', '${c['name']}', _asMap(c['input'])),
+      ],
+      <String, dynamic>{'role': 'assistant', 'content': content},
+    );
+  }
+
+  /// OpenAI, OpenRouter and anything that speaks chat completions.
+  Future<(String, List<AiToolCall>, Map<String, dynamic>)> _openaiTurn(
+    String system,
+    List<Map<String, dynamic>> messages,
+    List<AiTool> tools,
+  ) async {
     final (url, key) = switch (provider) {
       Provider.openai => ('https://api.openai.com/v1/chat/completions', _keys[Provider.openai] ?? ''),
       Provider.openrouter => ('https://openrouter.ai/api/v1/chat/completions', _keys[Provider.openrouter] ?? ''),
       _ => (_url('/chat/completions'), _keys[Provider.custom] ?? ''),
     };
-    final r = await http
-        .post(
-          Uri.parse(url),
-          headers: {
-            'content-type': 'application/json',
-            if (key.isNotEmpty) 'authorization': 'Bearer $key',
-            if (provider == Provider.openrouter) 'X-Title': 'Deckhand',
-          },
-          body: jsonEncode({
-            'model': model,
-            'messages': [
-              {'role': 'system', 'content': _system},
-              {'role': 'user', 'content': user},
-            ],
-            'response_format': provider == Provider.custom
-                ? {'type': 'json_object'}
-                : {
-                    'type': 'json_schema',
-                    'json_schema': {'name': 'fix', 'strict': true, 'schema': _schema},
-                  },
-          }),
-        )
-        .timeout(const Duration(minutes: 4));
-    if (r.statusCode >= 400) _fail(r);
-    final b = jsonDecode(utf8.decode(r.bodyBytes));
-    return '${b['choices']?[0]?['message']?['content'] ?? ''}';
-  }
-
-  /// Gemini's generateContent with a JSON response.
-  Future<String> _gemini(String user) async {
-    final r = await http
-        .post(
-          Uri.parse(
-            'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${_keys[Provider.gemini]}',
-          ),
-          headers: {'content-type': 'application/json'},
-          body: jsonEncode({
-            'systemInstruction': {
-              'parts': [
-                {'text': _system},
-              ],
+    final b = await _postJson(
+      url,
+      {if (key.isNotEmpty) 'authorization': 'Bearer $key', if (provider == Provider.openrouter) 'X-Title': 'Deckhand'},
+      {
+        'model': model,
+        'messages': [
+          {'role': 'system', 'content': system},
+          ...messages,
+        ],
+        'tools': [
+          for (final t in tools)
+            {
+              'type': 'function',
+              'function': {'name': t.name, 'description': t.description, 'parameters': t.schema},
             },
-            'contents': [
-              {
-                'role': 'user',
-                'parts': [
-                  {'text': user},
-                ],
-              },
-            ],
-            'generationConfig': {'responseMimeType': 'application/json'},
-          }),
-        )
-        .timeout(const Duration(minutes: 4));
-    if (r.statusCode >= 400) _fail(r);
-    final b = jsonDecode(utf8.decode(r.bodyBytes));
-    final parts = b['candidates']?[0]?['content']?['parts'] as List? ?? const [];
-    return parts.map((p) => '${p['text'] ?? ''}').join();
+        ],
+      },
+      provider == Provider.custom ? const Duration(minutes: 10) : const Duration(minutes: 4),
+    );
+    final msg = _asMap((b['choices'] as List?)?.firstOrNull is Map ? (b['choices'] as List).first['message'] : null);
+    return (
+      '${msg['content'] ?? ''}',
+      [
+        for (final c in (msg['tool_calls'] as List? ?? const []))
+          if (c is Map && c['function'] is Map)
+            AiToolCall('${c['id']}', '${c['function']['name']}', _asMap(c['function']['arguments'])),
+      ],
+      msg.isEmpty ? <String, dynamic>{'role': 'assistant', 'content': ''} : msg,
+    );
   }
 
-  /// A model running in Ollama on this computer, held to the schema.
-  Future<String> _ollama(String user) async {
-    final r = await http
-        .post(
-          Uri.parse(_url('/api/chat')),
-          headers: {'content-type': 'application/json'},
-          body: jsonEncode({
-            'model': model,
-            'stream': false,
-            'format': _schema,
-            'messages': [
-              {'role': 'system', 'content': _system},
-              {'role': 'user', 'content': user},
+  /// Gemini. Its content goes back as it came, which keeps its signatures.
+  Future<(String, List<AiToolCall>, Map<String, dynamic>)> _geminiTurn(
+    String system,
+    List<Map<String, dynamic>> messages,
+    List<AiTool> tools,
+  ) async {
+    final b = await _postJson(
+      'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${_keys[Provider.gemini]}',
+      const {},
+      {
+        'systemInstruction': {
+          'parts': [
+            {'text': system},
+          ],
+        },
+        'contents': messages,
+        'tools': [
+          {
+            'functionDeclarations': [
+              for (final t in tools) {'name': t.name, 'description': t.description, 'parameters': t.schema},
             ],
-          }),
-        )
-        // A local model on a laptop can be slow.
-        .timeout(const Duration(minutes: 10));
-    if (r.statusCode >= 400) _fail(r);
-    final b = jsonDecode(utf8.decode(r.bodyBytes));
-    return '${b['message']?['content'] ?? ''}';
+          },
+        ],
+      },
+      const Duration(minutes: 4),
+    );
+    final content = _asMap((b['candidates'] as List?)?.firstOrNull is Map ? (b['candidates'] as List).first['content'] : null);
+    final parts = content['parts'] as List? ?? const [];
+    var n = 0;
+    return (
+      [
+        for (final x in parts)
+          if (x is Map && x['text'] != null) '${x['text']}',
+      ].join(),
+      [
+        for (final x in parts)
+          if (x is Map && x['functionCall'] is Map)
+            AiToolCall('gemini-${n++}', '${x['functionCall']['name']}', _asMap(x['functionCall']['args'])),
+      ],
+      content.isEmpty
+          ? <String, dynamic>{
+              'role': 'model',
+              'parts': [
+                {'text': ''},
+              ],
+            }
+          : {...content, 'role': 'model'},
+    );
+  }
+
+  /// A local model in Ollama. It needs more room than Ollama's default to hold
+  /// a file and the conversation; a laptop can be slow.
+  Future<(String, List<AiToolCall>, Map<String, dynamic>)> _ollamaTurn(
+    String system,
+    List<Map<String, dynamic>> messages,
+    List<AiTool> tools,
+  ) async {
+    final b = await _postJson(_url('/api/chat'), const {}, {
+      'model': model,
+      'stream': false,
+      'options': {'num_ctx': 8192},
+      'messages': [
+        {'role': 'system', 'content': system},
+        ...messages,
+      ],
+      'tools': [
+        for (final t in tools)
+          {
+            'type': 'function',
+            'function': {'name': t.name, 'description': t.description, 'parameters': t.schema},
+          },
+      ],
+    }, const Duration(minutes: 10));
+    final msg = _asMap(b['message']);
+    var n = 0;
+    return (
+      '${msg['content'] ?? ''}',
+      [
+        for (final c in (msg['tool_calls'] as List? ?? const []))
+          if (c is Map && c['function'] is Map)
+            AiToolCall('ollama-${n++}', '${c['function']['name']}', _asMap(c['function']['arguments'])),
+      ],
+      msg.isEmpty ? <String, dynamic>{'role': 'assistant', 'content': ''} : msg,
+    );
   }
 
   // ---- Chat ----------------------------------------------------------------

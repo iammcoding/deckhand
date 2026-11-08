@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/agents.dart';
 import '../../core/ai.dart';
+import '../../core/ai_agent.dart';
 import '../../core/fixes.dart';
 import '../../core/safe_fix.dart';
 import '../../core/sdk.dart';
@@ -65,9 +67,6 @@ Future<void> confirmUndo(BuildContext context, SafeFix f) async {
   if (ok) SafeFixes.instance.undo(f);
 }
 
-/// True when a shell command writes to a file by itself.
-bool writesFile(String command) => RegExp(r'>|\bsed\s+-i|\btee\b|\bperl\s+-[a-z]*i').hasMatch(command);
-
 class SmartBar extends StatefulWidget {
   final List<LogLine> lines;
   final String projectPath;
@@ -75,14 +74,19 @@ class SmartBar extends StatefulWidget {
   /// Adds to the log below. What a fix or an agent runs goes there, so there
   /// is one log to read rather than a small one inside this bar.
   final void Function(String text, LogLevel level) log;
-  const SmartBar({super.key, required this.lines, required this.projectPath, required this.log});
+
+  /// The command that failed, so a fix can be checked by trying it again.
+  final List<String>? retry;
+  const SmartBar({super.key, required this.lines, required this.projectPath, required this.log, this.retry});
 
   @override
   State<SmartBar> createState() => _SmartBarState();
 }
 
 class _SmartBarState extends State<SmartBar> {
-  AiAnswer? _answer;
+  String? _answer;
+  bool _answerIsFix = false;
+  AiAgent? _agent;
   String? _aiError;
   bool _asking = false;
   final List<ShellJob> _runs = [];
@@ -111,13 +115,25 @@ class _SmartBarState extends State<SmartBar> {
   bool get _protecting => SafeFixes.instance.latest(widget.projectPath)?.state == SafeFixState.running;
 
   /// Everything that changes the project goes through here.
-  Future<void> _guarded(String title, Future<int?> Function() action) async {
+  Future<SafeFix> _guarded(String title, Future<int?> Function() action, {bool check = false}) {
     final log = widget.log;
-    await SafeFixes.instance.guard(
+    final project = widget.projectPath;
+    final retry = widget.retry;
+    final failure = Verdict.errorsIn(widget.lines.where((l) => l.level == LogLevel.error).map((l) => l.text));
+    return SafeFixes.instance.guard(
       title,
-      widget.projectPath,
+      project,
       action,
       say: (text, bad) => log(text, bad ? LogLevel.warn : LogLevel.system),
+      // Deckhand checks an AI's work itself, whatever the AI claims.
+      verify: check
+          ? (changes) => Verdict.check(
+              changes: changes,
+              run: (args) => Sdk.instance.run(args, cwd: project, timeout: const Duration(minutes: 5)),
+              retry: retry,
+              failure: failure,
+            )
+          : null,
     );
   }
 
@@ -152,7 +168,7 @@ class _SmartBarState extends State<SmartBar> {
     await _guarded('Fix with ${a.name}', () async {
       await run.start(failure);
       return run.exitCode;
-    });
+    }, check: true);
   }
 
   /// Sends what [source] prints to the log, even after this bar has gone: a
@@ -188,13 +204,6 @@ class _SmartBarState extends State<SmartBar> {
     _seenErrors = _errors;
   }
 
-  Future<void> _runCommand(String command) async {
-    final job = ShellJob(command, cwd: widget.projectPath);
-    setState(() => _runs.add(job));
-    _follow(job, job.log);
-    await _guarded(command, job.start);
-  }
-
   Future<void> _applyFix(Fix f) async {
     await _guarded(f.title, () async {
       for (final s in f.steps) {
@@ -214,24 +223,81 @@ class _SmartBarState extends State<SmartBar> {
     });
   }
 
+  /// A cloud model will now see project files, not only the log: said once
+  /// per provider. A local model keeps everything on this computer.
+  Future<bool> _okToShareFiles() async {
+    final provider = Ai.instance.provider;
+    if (provider == Provider.ollama || provider == Provider.custom) return true;
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'ai_files_ok_${provider.name}';
+    if (prefs.getBool(key) == true) return true;
+    if (!mounted) return false;
+    final c = C.of(context);
+    final ok =
+        await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: c.panel,
+            title: Text('Let ${provider.label} read this project?', style: TextStyle(fontSize: 16, color: c.text)),
+            content: SizedBox(
+              width: 440,
+              child: Text(
+                'To work out the cause, the AI reads files in this project, and what it reads is sent to ${provider.label}. '
+                "It can't read .env files, signing keys or similar, but a password typed into ordinary code or a script would be seen.",
+                style: TextStyle(fontSize: 13, height: 1.45, color: c.muted),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Allow')),
+            ],
+          ),
+        ) ??
+        false;
+    if (ok) await prefs.setBool(key, true);
+    return ok;
+  }
+
+  Future<String?> _flutterVersion() async {
+    final v = await Sdk.instance.version(cwd: widget.projectPath);
+    return v == null ? null : '${v['frameworkVersion']} (${v['channel']})';
+  }
+
+  /// Runs the AI, showing each thing it does in the log. Null if stopped.
+  Future<String?> _runAgent({required bool canEdit, String? earlier}) async {
+    final log = widget.log;
+    final failure = List<LogLine>.of(widget.lines);
+    final agent = AiAgent(widget.projectPath, canEdit: canEdit, onStep: (s) => log('AI $s', LogLevel.system));
+    setState(() => _agent = agent);
+    try {
+      return await agent.run(failure, flutterVersion: await _flutterVersion(), earlier: earlier);
+    } on AiStopped {
+      return null;
+    } finally {
+      if (mounted) setState(() => _agent = null);
+    }
+  }
+
+  /// Reads the project and explains. It can't change anything here.
   Future<void> _ask() async {
     if (!Ai.instance.connected) {
       setState(() => _aiError = 'Connect an AI model in Settings to use this. Your key stays in the keychain.');
       return;
     }
+    if (!await _okToShareFiles() || !mounted) return;
     setState(() {
       _asking = true;
       _aiError = null;
       _answer = null;
     });
     try {
-      final v = await Sdk.instance.version(cwd: widget.projectPath);
-      final a = await Ai.instance.explain(
-        log: widget.lines,
-        projectPath: widget.projectPath,
-        flutterVersion: v == null ? null : '${v['frameworkVersion']} (${v['channel']})',
-      );
-      if (mounted) setState(() => _answer = a);
+      final a = await _runAgent(canEdit: false);
+      if (mounted && a != null) {
+        setState(() {
+          _answer = a;
+          _answerIsFix = false;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() => _aiError = '$e');
     } finally {
@@ -239,60 +305,34 @@ class _SmartBarState extends State<SmartBar> {
     }
   }
 
-  Future<bool> _confirm(String command) async {
-    final c = C.of(context);
-    return await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: c.panel,
-            title: Text('Run this?', style: TextStyle(fontSize: 16, color: c.text)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (writesFile(command))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.warning_amber_rounded, size: 16, color: c.warn),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'This command changes a file. AI often gets that wrong, so check it first, or make the change yourself.',
-                            style: TextStyle(fontSize: 12.5, height: 1.4, color: c.warn),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                Text('In ${widget.projectPath}', style: TextStyle(fontSize: 12, color: c.muted)),
-                const SizedBox(height: 4),
-                Text(
-                  'A copy of the project is saved first, so you can undo this. Anything it changes outside the project can\'t be undone.',
-                  style: TextStyle(fontSize: 12, height: 1.4, color: c.muted),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: c.bg,
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: c.line),
-                  ),
-                  child: SelectableText(command, style: mono.copyWith(color: c.text)),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Run')),
-            ],
-          ),
-        ) ??
-        false;
+  /// Lets the AI change files, inside the safety net.
+  Future<void> _fixWithAi() async {
+    if (!await _okToShareFiles() || !mounted) return;
+    final earlier = _answer;
+    setState(() {
+      _asking = true;
+      _aiError = null;
+    });
+    String? said;
+    try {
+      final fix = await _guarded('AI fix', () async {
+        said = await _runAgent(canEdit: true, earlier: earlier);
+        return said == null ? 1 : 0;
+      }, check: true);
+      // If it was rejected, what the AI claimed no longer means anything.
+      if (fix.state == SafeFixState.restored) {
+        if (mounted) setState(() => _answer = null);
+      } else if (mounted && said != null) {
+        setState(() {
+          _answer = said;
+          _answerIsFix = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _aiError = '$e');
+    } finally {
+      if (mounted) setState(() => _asking = false);
+    }
   }
 
   @override
@@ -368,19 +408,24 @@ class _SmartBarState extends State<SmartBar> {
                 if (agent != null) ...[
                   const SizedBox(width: 6),
                   OutlinedButton.icon(
-                    onPressed: busy ? null : () => _fixWithAgent(agent),
+                    onPressed: busy || _asking ? null : () => _fixWithAgent(agent),
                     icon: const Icon(Icons.terminal_rounded, size: 15),
                     label: Text((run?.running ?? false) ? '${agent.name} is working…' : 'Fix with ${agent.name}'),
                   ),
                 ],
                 const SizedBox(width: 6),
                 OutlinedButton.icon(
-                  onPressed: _asking ? null : _ask,
+                  onPressed: _asking || busy ? null : _ask,
                   // A still icon on purpose: a local model can take minutes, and
                   // a spinner would redraw the whole window all that time.
                   icon: Icon(_asking ? Icons.hourglass_empty_rounded : Icons.auto_awesome_outlined, size: 15),
                   label: Text(_asking ? 'Reading…' : 'Ask AI'),
                 ),
+                if (_agent != null)
+                  TextButton(
+                    onPressed: _agent!.stop,
+                    child: Text('Stop', style: TextStyle(color: c.bad)),
+                  ),
               ],
             ),
           ),
@@ -434,7 +479,13 @@ class _SmartBarState extends State<SmartBar> {
     final (IconData icon, Color color, String text) = switch (f.state) {
       SafeFixState.running => (Icons.shield_outlined, c.muted, 'Project saved. Working…'),
       SafeFixState.unprotected => (Icons.block_rounded, c.bad, f.error ?? ''),
-      SafeFixState.restored => (Icons.shield_outlined, c.warn, 'That broke ${f.broke}. Your files are back as they were.'),
+      SafeFixState.restored => (
+        Icons.shield_outlined,
+        c.warn,
+        f.broke != null
+            ? 'That broke ${f.broke}. Your files are back as they were.'
+            : "It didn't work: ${f.failedCheck}. Your files are back as they were.",
+      ),
       SafeFixState.undone => (Icons.undo_rounded, c.muted, 'Undone. Your files are back as they were.'),
       SafeFixState.kept when f.error != null => (Icons.error_outline_rounded, c.bad, f.error!),
       SafeFixState.kept when files.isEmpty => (Icons.info_outline_rounded, c.muted, 'It changed no files.'),
@@ -443,7 +494,8 @@ class _SmartBarState extends State<SmartBar> {
         c.warn,
         'Changed $names, but the analyzer now finds ${f.addedErrors} more errors.',
       ),
-      SafeFixState.kept => (Icons.check_circle_outline_rounded, c.good, 'Changed $names'),
+      SafeFixState.kept when f.note != null => (Icons.warning_amber_rounded, c.warn, 'Changed $names. ${f.note}'),
+      SafeFixState.kept => (Icons.check_circle_outline_rounded, c.good, 'Changed $names, and checked it works.'),
     };
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 4, 6, 4),
@@ -478,71 +530,55 @@ class _SmartBarState extends State<SmartBar> {
 
   /// The answer, as plain text in the bar: a dark box here read as a second
   /// terminal.
-  Widget _answerView(C c, AiAnswer a) => Container(
-    padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-    decoration: BoxDecoration(
-      border: Border(top: BorderSide(color: c.line)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.auto_awesome_outlined, size: 14, color: c.accent),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                a.summary,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Close',
-              iconSize: 15,
-              visualDensity: VisualDensity.compact,
-              onPressed: () => setState(() => _answer = null),
-              icon: const Icon(Icons.close_rounded),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        SelectableText(a.cause, style: TextStyle(fontSize: 12.5, height: 1.45, color: c.muted)),
-        for (final s in a.steps) ...[
-          const SizedBox(height: 10),
+  Widget _answerView(C c, String a) {
+    final lines = a.trim().split('\n');
+    final rest = lines.skip(1).join('\n').trim();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(Icons.auto_awesome_outlined, size: 14, color: c.accent),
+              ),
+              const SizedBox(width: 6),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.title,
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text),
-                    ),
-                    const SizedBox(height: 2),
-                    SelectableText(s.command, style: mono.copyWith(fontSize: 12, color: c.text)),
-                    Text(s.why, style: TextStyle(fontSize: 11.5, color: c.muted)),
-                  ],
+                child: SelectableText(
+                  lines.first,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text),
                 ),
               ),
-              OutlinedButton(
-                onPressed: _protecting
-                    ? null
-                    : () async {
-                        if (await _confirm(s.command)) _runCommand(s.command);
-                      },
-                child: const Text('Run'),
+              IconButton(
+                tooltip: 'Close',
+                iconSize: 15,
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() => _answer = null),
+                icon: const Icon(Icons.close_rounded),
               ),
             ],
           ),
+          if (rest.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            SelectableText(rest, style: TextStyle(fontSize: 12.5, height: 1.45, color: c.muted)),
+          ],
+          if (!_answerIsFix) ...[
+            const SizedBox(height: 10),
+            FilledButton(onPressed: _asking || _protecting ? null : _fixWithAi, child: const Text('Let AI fix it')),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            _answerIsFix ? 'AI can be wrong. Undo is above if this looks off.' : "AI can be wrong. Nothing has changed yet.",
+            style: TextStyle(fontSize: 11, color: c.muted.withValues(alpha: 0.7)),
+          ),
         ],
-        const SizedBox(height: 8),
-        Text(
-          'AI can be wrong. Check a command before you run it.',
-          style: TextStyle(fontSize: 11, color: c.muted.withValues(alpha: 0.7)),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

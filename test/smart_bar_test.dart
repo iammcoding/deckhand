@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:deckhand/core/ai.dart';
+import 'package:deckhand/core/ai_agent.dart';
 import 'package:deckhand/core/fixes.dart';
 import 'package:deckhand/core/safe_fix.dart';
 import 'package:deckhand/core/sessions.dart';
@@ -53,20 +55,6 @@ void main() {
     });
   });
 
-  group('commands that change files are called out', () {
-    for (final c in [
-      "echo 'flutter:' >> pubspec.yaml",
-      'cat a > b',
-      "sed -i '' 's/a/b/' pubspec.yaml",
-      'echo x | tee pubspec.yaml',
-    ]) {
-      test(c, () => expect(writesFile(c), isTrue));
-    }
-    for (final c in ['flutter pub get', 'pod install --repo-update', 'flutter gen-l10n']) {
-      test('not: $c', () => expect(writesFile(c), isFalse));
-    }
-  });
-
   group('waiting for the AI', () {
     Future<void> pump(WidgetTester t, List<String> out) async {
       Ai.instance.provider = Provider.ollama;
@@ -90,17 +78,24 @@ void main() {
 
     testWidgets('nothing animates, so the window is not redrawn all that time', (t) async {
       await pump(t, []);
+      // A model that takes its time.
+      final done = Completer<AiTurn>();
+      AiAgent.stepOverride = (a, b, c) => done.future;
+      addTearDown(() => AiAgent.stepOverride = null);
       await t.tap(find.text('Ask AI'));
+      await t.runAsync(() => Future.delayed(const Duration(milliseconds: 200)));
       await t.pump();
       expect(find.text('Reading…'), findsOneWidget);
+      expect(find.text('Stop'), findsOneWidget);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       // Let the button's own press and hover animations finish.
       await t.pump(const Duration(seconds: 1));
       await t.pump(const Duration(seconds: 1));
       expect(t.binding.hasScheduledFrame, isFalse, reason: 'no frames while waiting');
-      // Let the failed call finish.
-      await t.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+      done.complete(const AiTurn('', [], native: true));
+      await t.runAsync(() => Future.delayed(const Duration(milliseconds: 100)));
       await t.pump();
+      expect(find.text('Ask AI'), findsOneWidget);
     });
 
     testWidgets('a fix that broke something says so, and a good one offers Undo', (t) async {

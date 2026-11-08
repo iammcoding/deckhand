@@ -202,7 +202,7 @@ class _JobLog extends StatelessWidget {
               ),
             ),
           Expanded(
-            child: _BarAndLog(lines: j.log, add: j.add, projectPath: live == null ? pr?.path : null),
+            child: _BarAndLog(lines: j.log, add: j.add, projectPath: live == null ? pr?.path : null, retry: j.args),
           ),
         ],
       ),
@@ -216,7 +216,8 @@ class _BarAndLog extends StatelessWidget {
   final List<LogLine> lines;
   final void Function(String text, LogLevel level) add;
   final String? projectPath;
-  const _BarAndLog({required this.lines, required this.add, required this.projectPath});
+  final List<String>? retry;
+  const _BarAndLog({required this.lines, required this.add, required this.projectPath, this.retry});
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -226,7 +227,7 @@ class _BarAndLog extends StatelessWidget {
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: box.maxHeight * 0.6),
             child: SingleChildScrollView(
-              child: SmartBar(lines: lines, projectPath: projectPath!, log: add),
+              child: SmartBar(lines: lines, projectPath: projectPath!, log: add, retry: retry),
             ),
           ),
         Expanded(child: LogView(lines: lines)),

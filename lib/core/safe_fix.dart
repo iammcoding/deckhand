@@ -220,6 +220,70 @@ class Snapshot {
   }
 }
 
+/// Deckhand's own check of a fix, which doesn't rely on what the AI claims.
+class Verdict {
+  /// Why the project should go back, or null if it stays.
+  final String? failed;
+
+  /// Worth knowing, but no reason to undo.
+  final String? note;
+  const Verdict({this.failed, this.note});
+
+  static const _commandsWorthRetrying = {'pub', 'gen-l10n', 'analyze', 'dart'};
+  static final _noNetwork = RegExp(
+    r'SocketException|Failed host lookup|Connection (refused|failed|closed)|Network is unreachable',
+    caseSensitive: false,
+  );
+
+  /// The error lines of a log, to recognise the same failure coming back.
+  static Set<String> errorsIn(Iterable<String> lines) => {
+    for (final l in lines.map((x) => x.trim()))
+      if (l.length >= 12 && !l.startsWith('#') && !l.startsWith('Stopped with code')) l,
+  };
+
+  static String _lastWords(String out) {
+    final lines = out
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty && !l.startsWith('#') && !l.startsWith('<asynchronous'));
+    final useful = lines.where((l) => !l.toLowerCase().startsWith('unhandled exception'));
+    final first = useful.firstWhere(
+      (l) => RegExp('error|exception|failed|because', caseSensitive: false).hasMatch(l),
+      orElse: () => useful.isEmpty ? '' : useful.first,
+    );
+    return first.length > 160 ? '${first.substring(0, 160)}…' : first;
+  }
+
+  /// Does the project still work, and is the failure gone? [run] runs a Flutter
+  /// tool in the project; [retry] is the command that failed, when it's quick
+  /// to try again; [failure] is its error lines.
+  static Future<Verdict> check({
+    required Changes changes,
+    required Future<ProcessResult> Function(List<String> args) run,
+    List<String>? retry,
+    Set<String> failure = const {},
+  }) async {
+    if (changes.isEmpty) return const Verdict(note: "It didn't change anything.");
+    if (changes.all.contains('pubspec.yaml') || changes.all.contains('pubspec.lock')) {
+      final r = await run(['pub', 'get']);
+      final out = '${r.stdout}\n${r.stderr}';
+      if (r.exitCode != 0 && !_noNetwork.hasMatch(out)) {
+        return Verdict(failed: 'flutter pub get fails with its changes (${_lastWords(out)})');
+      }
+    }
+    if (retry == null || retry.isEmpty || !_commandsWorthRetrying.contains(retry.first)) return const Verdict();
+    final r = await run(retry);
+    if (r.exitCode == 0) return const Verdict();
+    final out = '${r.stdout}\n${r.stderr}';
+    final name = retry.first == 'dart' ? retry.join(' ') : 'flutter ${retry.join(' ')}';
+    if (errorsIn(out.split('\n')).any(failure.contains)) {
+      return Verdict(failed: '$name still fails the same way');
+    }
+    // Moved on to a different problem: that can be real progress, so keep it.
+    return Verdict(note: '$name now fails differently: ${_lastWords(out)}');
+  }
+}
+
 enum SafeFixState { running, kept, restored, undone, unprotected }
 
 /// One protected fix: its copy of the project, and how it turned out.
@@ -232,6 +296,12 @@ class SafeFix {
 
   /// The config file it broke, when Deckhand put things back.
   String? broke;
+
+  /// Why Deckhand's own check rejected it, when it put things back.
+  String? failedCheck;
+
+  /// What Deckhand's own check found that's worth saying.
+  String? note;
 
   /// Analyzer errors it added, when that went up.
   int addedErrors = 0;
@@ -295,6 +365,7 @@ class SafeFixes extends ChangeNotifier {
     Future<int?> Function() action, {
     void Function(String text, bool isProblem)? say,
     bool checkAnalyzer = true,
+    Future<Verdict> Function(Changes changes)? verify,
   }) async {
     final fix = SafeFix(title, project);
     _latest[project] = fix;
@@ -337,6 +408,31 @@ class SafeFixes extends ChangeNotifier {
       }
     } else {
       fix.state = SafeFixState.kept;
+      if (verify != null && fix.error == null && !fix.changes.isEmpty) {
+        say?.call('Checking it worked…', false);
+        Verdict verdict;
+        try {
+          verdict = await verify(fix.changes);
+        } catch (e) {
+          verdict = Verdict(note: "Couldn't check it worked: $e");
+        }
+        fix.note = verdict.note;
+        if (verdict.failed != null) {
+          fix.failedCheck = verdict.failed;
+          undo(fix);
+          if (fix.state == SafeFixState.undone) {
+            fix.state = SafeFixState.restored;
+            say?.call("It didn't work: ${verdict.failed}. Deckhand put your files back as they were.", true);
+            notifyListeners();
+            if (checkAnalyzer) await Problems.instance.run(project);
+            return fix;
+          }
+          fix.state = SafeFixState.kept;
+          say?.call("It didn't work: ${verdict.failed}. ${fix.error}", true);
+        } else if (verdict.note != null) {
+          say?.call(verdict.note!, true);
+        }
+      }
       if (fix.changes.isEmpty) {
         say?.call('It changed no files.', false);
       } else {

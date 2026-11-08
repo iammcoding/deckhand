@@ -221,7 +221,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
         section(
           'AI model',
-          'Ask AI on an error sends the end of the log and your pubspec to the model you pick, and suggests a fix.',
+          "Ask AI sends the end of the log, and the project files it decides to read, to the model you pick. It can't read .env files or signing keys. With Ollama, nothing leaves this computer.",
           [
             row(
               'Provider',

@@ -18,7 +18,7 @@ class RunPage extends StatefulWidget {
 }
 
 class _RunPageState extends State<RunPage> {
-  static RunSession? _session;
+  RunSession? get _session => currentRun.value;
 
   bool get _running => _session != null && !_session!.stopped;
 
@@ -26,9 +26,10 @@ class _RunPageState extends State<RunPage> {
     final project = Projects.instance.current;
     final device = Devices.instance.selected;
     if (project == null || device == null) return;
-    _session?.dispose();
+    currentRun.value?.dispose();
     final s = RunSession(projectPath: project.path, deviceId: device.id, deviceName: device.name);
-    setState(() => _session = s);
+    currentRun.value = s;
+    setState(() {});
     s.start();
   }
 
@@ -45,7 +46,7 @@ class _RunPageState extends State<RunPage> {
       child: Focus(
         autofocus: true,
         child: ListenableBuilder(
-          listenable: Listenable.merge([Devices.instance, Projects.instance, if (_session != null) _session!]),
+          listenable: Listenable.merge([Devices.instance, Projects.instance, currentRun, if (_session != null) _session!]),
           builder: (context, _) {
             final s = _session;
             final devices = Devices.instance.list;

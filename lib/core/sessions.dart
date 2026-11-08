@@ -8,6 +8,9 @@ import 'sdk.dart';
 
 enum LogLevel { info, warn, error, progress, system }
 
+/// The app running now, for the Run page and the status bar.
+final currentRun = ValueNotifier<RunSession?>(null);
+
 class LogLine {
   final DateTime at;
   final String text;

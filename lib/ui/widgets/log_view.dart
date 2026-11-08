@@ -123,9 +123,32 @@ class _LogViewState extends State<LogView> {
               : SelectionArea(
                   child: ListView.builder(
                     controller: _scroll,
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                     itemCount: shown.length,
-                    itemBuilder: (_, i) => Text(shown[i].text, style: mono.copyWith(color: _color(c, shown[i].level))),
+                    itemBuilder: (_, i) {
+                      final l = shown[i];
+                      final t = l.at;
+                      final hh = t.hour.toString().padLeft(2, '0');
+                      final mm = t.minute.toString().padLeft(2, '0');
+                      final ss = t.second.toString().padLeft(2, '0');
+                      final mark = l.level == LogLevel.error || l.level == LogLevel.warn;
+                      return Container(
+                        // Errors and warnings get a tinted row and a bar, so
+                        // they stand out in a long log.
+                        color: l.level == LogLevel.error
+                            ? c.bad.withValues(alpha: 0.07)
+                            : l.level == LogLevel.warn
+                                ? c.warn.withValues(alpha: 0.06)
+                                : null,
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Container(width: 2, height: 18, color: mark ? _color(c, l.level) : Colors.transparent),
+                          const SizedBox(width: 8),
+                          Text('$hh:$mm:$ss', style: mono.copyWith(fontSize: 11.5, color: c.muted.withValues(alpha: 0.55))),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(l.text, style: mono.copyWith(color: _color(c, l.level)))),
+                        ]),
+                      );
+                    },
                   ),
                 ),
         ),

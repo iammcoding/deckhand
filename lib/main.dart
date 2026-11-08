@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/devices.dart';
+import 'core/ai.dart';
 import 'core/projects.dart';
 import 'core/sdk.dart';
 import 'ui/shell.dart';
@@ -13,6 +14,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Sdk.instance.init();
   await Projects.instance.load();
+  await Ai.instance.load();
   Devices.instance.watch();
   final prefs = await SharedPreferences.getInstance();
   final saved = prefs.getString('theme');

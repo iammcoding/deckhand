@@ -8,6 +8,7 @@ import '../../core/sessions.dart';
 import '../shell.dart';
 import '../theme.dart';
 import '../widgets/log_view.dart';
+import '../widgets/smart_bar.dart';
 
 class _Target {
   final String id; // the flutter build subcommand
@@ -181,7 +182,10 @@ class _BuildPageState extends State<BuildPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: LogView(lines: job?.log ?? const []),
+              child: Column(children: [
+                if (job != null) SmartBar(lines: job.log, projectPath: pr.path),
+                Expanded(child: LogView(lines: job?.log ?? const [])),
+              ]),
             ),
           ),
         ]);

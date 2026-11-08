@@ -7,6 +7,7 @@ import '../../core/sessions.dart';
 import '../shell.dart';
 import '../theme.dart';
 import '../widgets/log_view.dart';
+import '../widgets/smart_bar.dart';
 
 /// The app on a device: run, hot reload, hot restart, stop, and its log.
 /// One session at a time; it keeps going while you're on other pages.
@@ -134,7 +135,11 @@ class _RunPageState extends State<RunPage> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                  child: LogView(lines: s?.log ?? const []),
+                  child: Column(children: [
+                    if (s != null && Projects.instance.current != null)
+                      SmartBar(lines: s.log, projectPath: Projects.instance.current!.path),
+                    Expanded(child: LogView(lines: s?.log ?? const [])),
+                  ]),
                 ),
               ),
             ]);

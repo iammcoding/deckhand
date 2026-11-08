@@ -8,6 +8,7 @@ import '../../core/projects.dart';
 import '../../core/sessions.dart';
 import '../theme.dart';
 import '../widgets/log_view.dart';
+import '../widgets/smart_bar.dart';
 
 /// The open project at a glance: what it is, what it targets, and the things
 /// you do most, one click each.
@@ -128,6 +129,7 @@ class _OverviewPageState extends State<OverviewPage> {
               if (busy) TextButton(onPressed: job.cancel, child: Text('Cancel', style: TextStyle(fontSize: 12, color: c.bad))),
             ]),
             const SizedBox(height: 8),
+            SmartBar(lines: job.log, projectPath: pr.path),
             SizedBox(height: 300, child: LogView(lines: job.log)),
           ],
         ]);

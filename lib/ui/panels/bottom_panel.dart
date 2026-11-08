@@ -20,7 +20,15 @@ class BottomPanel extends StatelessWidget {
     final c = C.of(context);
     final b = Bench.instance;
     return ListenableBuilder(
-      listenable: Listenable.merge([currentRun, currentBuild, currentTask, currentLogs, currentPreview, Problems.instance]),
+      listenable: Listenable.merge([
+        Bench.instance,
+        currentRun,
+        currentBuild,
+        currentTask,
+        currentLogs,
+        currentPreview,
+        Problems.instance,
+      ]),
       builder: (context, _) {
         final pb = Problems.instance;
         return Container(

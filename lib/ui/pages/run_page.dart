@@ -59,7 +59,7 @@ class _RunPageState extends State<RunPage> {
                   Container(
                     height: 34,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(border: Border.all(color: c.line), borderRadius: BorderRadius.circular(7)),
+                    decoration: BoxDecoration(border: Border.all(color: c.line), borderRadius: BorderRadius.circular(5)),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: Devices.instance.selected?.id,

@@ -161,7 +161,7 @@ class _BuildPageState extends State<BuildPage> {
                 decoration: BoxDecoration(
                   color: c.good.withValues(alpha: 0.08),
                   border: Border.all(color: c.good.withValues(alpha: 0.4)),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(5),
                 ),
                 child: Row(children: [
                   Icon(Icons.check_circle_rounded, color: c.good, size: 18),

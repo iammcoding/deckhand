@@ -110,10 +110,10 @@ class _DoctorPageState extends State<DoctorPage> {
             };
             final open = _open.contains(i);
             return Container(
-              decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(10)),
+              decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(6)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 InkWell(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(6),
                   onTap: () => setState(() => open ? _open.remove(i) : _open.add(i)),
                   child: Padding(
                     padding: const EdgeInsets.all(14),

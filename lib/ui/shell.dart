@@ -15,6 +15,7 @@ import 'pages/projects_page.dart';
 import 'pages/run_page.dart';
 import 'pages/settings_page.dart';
 import 'theme.dart';
+import 'widgets/palette.dart';
 
 class Shell extends StatefulWidget {
   final ValueNotifier<ThemeMode> themeMode;
@@ -84,6 +85,40 @@ class _ShellState extends State<Shell> {
 
   void go(int i) => setState(() => _page = i);
 
+  /// What ⌘K can do: go anywhere, drive the running app, open a recent
+  /// project, change the look.
+  List<Command> _commands() {
+    final project = Projects.instance.current;
+    final run = currentRun.value;
+    final live = run != null && !run.stopped;
+    return [
+      if (project != null) ...[
+        Command('Overview', 'Go to', () => go(1), keys: '⌘1'),
+        Command('Run', 'Go to', () => go(2), keys: '⌘2'),
+        Command('Build', 'Go to', () => go(3), keys: '⌘3'),
+      ],
+      Command('Projects', 'Go to', () => go(0), keys: '⌘O'),
+      Command('Devices', 'Go to', () => go(4)),
+      Command('Doctor', 'Go to', () => go(5)),
+      Command('Settings', 'Go to', () => go(6), keys: '⌘,'),
+      if (live && run.canReload) ...[
+        Command('Hot reload', 'App', () => run.reload(), keys: '⌘R'),
+        Command('Hot restart', 'App', () => run.reload(full: true), keys: '⇧⌘R'),
+      ],
+      if (live) Command('Stop the app', 'App', run.stop),
+      Command('Refresh devices', 'Devices', Devices.instance.refresh),
+      for (final d in Devices.instance.list) Command('Use ${d.name}', 'Devices', () => Devices.instance.select(d.id)),
+      for (final r in Projects.instance.recent.where((r) => r.path != project?.path).take(8))
+        Command('Open ${r.name}', 'Projects', () async {
+          await Projects.instance.open(r.path);
+          go(1);
+        }),
+      Command('Dark appearance', 'Look', () => widget.themeMode.value = ThemeMode.dark),
+      Command('Light appearance', 'Look', () => widget.themeMode.value = ThemeMode.light),
+      Command('Match the system', 'Look', () => widget.themeMode.value = ThemeMode.system),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = C.of(context);
@@ -106,6 +141,7 @@ class _ShellState extends State<Shell> {
         key(LogicalKeyboardKey.digit3): () => project != null ? go(3) : null,
         key(LogicalKeyboardKey.keyO): () => go(0),
         key(LogicalKeyboardKey.comma): () => go(6),
+        key(LogicalKeyboardKey.keyK): () => showPalette(context, _commands()),
       },
       child: Focus(
         autofocus: true,
@@ -133,12 +169,7 @@ class _ShellState extends State<Shell> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
             child: Row(children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(color: c.accent, borderRadius: BorderRadius.circular(7)),
-                child: const Icon(Icons.anchor_rounded, size: 15, color: Colors.white),
-              ),
+              Icon(Icons.anchor_rounded, size: 18, color: c.text),
               const SizedBox(width: 9),
               Text('Deckhand', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: c.text, letterSpacing: -0.2)),
             ]),
@@ -147,24 +178,14 @@ class _ShellState extends State<Shell> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Material(
-              color: c.raised,
-              borderRadius: BorderRadius.circular(9),
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(5),
               child: InkWell(
-                borderRadius: BorderRadius.circular(9),
+                borderRadius: BorderRadius.circular(5),
                 onTap: () => go(0),
                 child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 9, 8, 9),
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(9), border: Border.all(color: c.line)),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
                   child: Row(children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: c.accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(7)),
-                      child: Text(project == null || project.name.isEmpty ? '+' : project.name[0].toUpperCase(),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: c.accent)),
-                    ),
-                    const SizedBox(width: 9),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(project?.name ?? 'Open a project',
@@ -188,6 +209,24 @@ class _ShellState extends State<Shell> {
           _section(c, 'TOOLS'),
           for (final n in _tools) _navItem(n, c, enabled: true),
           const Spacer(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(5),
+              onTap: () => showPalette(context, _commands()),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(border: Border.all(color: c.line), borderRadius: BorderRadius.circular(5)),
+                child: Row(children: [
+                  Icon(Icons.search_rounded, size: 15, color: c.muted),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Commands', style: TextStyle(fontSize: 12.5, color: c.muted))),
+                  Text(Platform.isMacOS ? '⌘K' : 'Ctrl K', style: TextStyle(fontSize: 11, color: c.muted.withValues(alpha: 0.7))),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
           _navItem(const _Nav(Icons.tune_rounded, 'Settings', 6, keys: '⌘,'), c, enabled: true),
           const SizedBox(height: 10),
         ]),
@@ -205,9 +244,9 @@ class _ShellState extends State<Shell> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
       child: Material(
         color: on ? c.raised : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(5),
         child: InkWell(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(5),
           onTap: enabled ? () => go(n.page) : null,
           child: Stack(children: [
             // The page you're on: a short accent bar at the left edge.

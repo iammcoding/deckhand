@@ -65,7 +65,7 @@ class _LogViewState extends State<LogView> {
         .toList();
     final errors = widget.lines.where((l) => l.level == LogLevel.error).length;
     return Container(
-      decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(5)),
       child: Column(children: [
         Container(
           height: 38,

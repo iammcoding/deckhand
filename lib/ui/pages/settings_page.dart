@@ -71,7 +71,7 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(10)),
+          decoration: BoxDecoration(color: c.panel, border: Border.all(color: c.line), borderRadius: BorderRadius.circular(6)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Flutter SDK', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c.text)),
             const SizedBox(height: 6),

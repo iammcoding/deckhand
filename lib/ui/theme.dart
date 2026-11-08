@@ -46,6 +46,7 @@ class C {
   static C of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? dark : light;
 }
 
+const monoStyle = mono;
 const mono = TextStyle(fontFamily: 'Menlo', fontFamilyFallback: ['Consolas', 'DejaVu Sans Mono', 'monospace'], fontSize: 12.5, height: 1.45);
 
 ThemeData buildTheme(Brightness b) {
@@ -67,7 +68,7 @@ ThemeData buildTheme(Brightness b) {
         foregroundColor: Colors.white,
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
     ),
@@ -77,7 +78,7 @@ ThemeData buildTheme(Brightness b) {
         side: BorderSide(color: c.line),
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
     ),

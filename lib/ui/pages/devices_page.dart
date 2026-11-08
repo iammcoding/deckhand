@@ -52,18 +52,14 @@ class DevicesPage extends StatelessWidget {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                     itemCount: d.list.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, __) => Divider(height: 1, color: C.of(context).line),
                     itemBuilder: (_, i) {
                       final dev = d.list[i];
                       final on = d.selected?.id == dev.id;
                       return Material(
-                        color: c.panel,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: on ? c.accent.withValues(alpha: 0.6) : c.line),
-                        ),
+                        color: on ? c.raised : Colors.transparent,
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(6),
                           onTap: () => d.select(dev.id),
                           child: Padding(
                             padding: const EdgeInsets.all(14),

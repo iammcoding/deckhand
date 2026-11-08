@@ -6,6 +6,7 @@ import 'pages/devices_page.dart';
 import 'pages/doctor_page.dart';
 import 'pages/overview_page.dart';
 import 'pages/projects_page.dart';
+import 'pages/sdk_page.dart';
 import 'pages/settings_page.dart';
 import 'theme.dart';
 
@@ -44,6 +45,7 @@ class EditorArea extends StatelessWidget {
                     TabKind.devices => const DevicesPage(),
                     TabKind.doctor => const DoctorPage(),
                     TabKind.settings => SettingsPage(themeMode: themeMode),
+                    TabKind.sdk => const SdkPage(),
                   },
           ),
         ],
@@ -70,6 +72,7 @@ class _TabState extends State<_Tab> {
     TabKind.devices => Icons.devices_rounded,
     TabKind.doctor => Icons.health_and_safety_outlined,
     TabKind.settings => Icons.tune_rounded,
+    TabKind.sdk => Icons.flutter_dash_rounded,
   };
 
   @override

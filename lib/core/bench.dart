@@ -11,10 +11,10 @@ import 'projects.dart';
 enum Activity { explorer, build, tasks }
 
 /// What an editor tab holds.
-enum TabKind { file, overview, projects, devices, doctor, settings }
+enum TabKind { file, overview, projects, devices, doctor, settings, sdk }
 
 /// The tabs along the bottom panel. `run` is the console.
-enum BottomTab { run, build, tasks, problems }
+enum BottomTab { run, build, tasks, problems, logs, preview }
 
 class EditorTab {
   final TabKind kind;
@@ -30,6 +30,7 @@ class EditorTab {
     TabKind.devices => 'Devices',
     TabKind.doctor => 'Doctor',
     TabKind.settings => 'Settings',
+    TabKind.sdk => 'Flutter SDK',
   };
 }
 

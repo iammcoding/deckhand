@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/projects.dart';
 import '../../core/sdk.dart';
+import '../create_project.dart';
 import '../widgets/page_header.dart';
 import '../theme.dart';
 
@@ -38,6 +39,11 @@ class ProjectsPage extends StatelessWidget {
               title: 'Projects',
               subtitle: 'Open a Flutter project to run, build and ship it.',
               actions: [
+                OutlinedButton.icon(
+                  onPressed: () => showCreateProject(context),
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('New project'),
+                ),
                 FilledButton.icon(
                   onPressed: () => _open(context),
                   icon: const Icon(Icons.folder_open_rounded, size: 16),

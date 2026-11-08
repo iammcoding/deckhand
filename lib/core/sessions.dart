@@ -52,6 +52,9 @@ class Job extends ChangeNotifier {
     try {
       final p = await Sdk.instance.start(args, cwd: cwd);
       _p = p;
+      // Nothing answers prompts here: an empty stdin makes a command that
+      // asks something stop with an error instead of waiting forever.
+      p.stdin.close();
       notifyListeners();
       p.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => add(l, guess(l)));
       p.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) => add(l, LogLevel.error));
@@ -80,7 +83,17 @@ class RunSession extends ChangeNotifier {
   final String deviceId;
   final String deviceName;
   final List<String> extraArgs;
-  RunSession({required this.projectPath, required this.deviceId, required this.deviceName, this.extraArgs = const []});
+
+  /// `flutter attach`: connect to an app already running on the device
+  /// instead of starting it.
+  final bool attach;
+  RunSession({
+    required this.projectPath,
+    required this.deviceId,
+    required this.deviceName,
+    this.extraArgs = const [],
+    this.attach = false,
+  });
 
   final List<LogLine> log = [];
   Process? _p;
@@ -99,7 +112,7 @@ class RunSession extends ChangeNotifier {
   }
 
   Future<void> start() async {
-    final args = ['run', '--machine', '-d', deviceId, ...extraArgs];
+    final args = [attach ? 'attach' : 'run', '--machine', '-d', deviceId, ...extraArgs];
     _add('\$ flutter ${args.join(' ')}', LogLevel.system);
     try {
       final p = await Sdk.instance.start(args, cwd: projectPath);
@@ -109,7 +122,7 @@ class RunSession extends ChangeNotifier {
       final code = await p.exitCode;
       stopped = true;
       progress = null;
-      _add('The app stopped (code $code).', code == 0 ? LogLevel.system : LogLevel.error);
+      _add(attach ? 'Detached (code $code).' : 'The app stopped (code $code).', code == 0 ? LogLevel.system : LogLevel.error);
     } catch (e) {
       stopped = true;
       _add('$e', LogLevel.error);
@@ -146,7 +159,7 @@ class RunSession extends ChangeNotifier {
       case 'app.started':
         started = true;
         progress = null;
-        _add('Running on $deviceName.', LogLevel.system);
+        _add(attach ? 'Attached to the app on $deviceName.' : 'Running on $deviceName.', LogLevel.system);
       case 'app.log':
         final text = '${params['log'] ?? ''}';
         for (final l in const LineSplitter().convert(text)) {

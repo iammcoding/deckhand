@@ -20,7 +20,7 @@ class BottomPanel extends StatelessWidget {
     final c = C.of(context);
     final b = Bench.instance;
     return ListenableBuilder(
-      listenable: Listenable.merge([currentRun, currentBuild, currentTask, Problems.instance]),
+      listenable: Listenable.merge([currentRun, currentBuild, currentTask, currentLogs, currentPreview, Problems.instance]),
       builder: (context, _) {
         final pb = Problems.instance;
         return Container(
@@ -43,6 +43,10 @@ class BottomPanel extends StatelessWidget {
                       count: pb.errors + pb.warnings,
                       countColor: pb.errors > 0 ? c.bad : c.warn,
                     ),
+                    // Long-running ones get a tab only while they exist.
+                    if (currentLogs.value != null) _tab(c, BottomTab.logs, 'Device log', dot: _jobDot(c, currentLogs.value)),
+                    if (currentPreview.value != null)
+                      _tab(c, BottomTab.preview, 'Previews', dot: _jobDot(c, currentPreview.value)),
                     const Spacer(),
                     IconButton(
                       tooltip: 'Hide console  ⌘J',
@@ -63,6 +67,12 @@ class BottomPanel extends StatelessWidget {
                     BottomTab.build => _JobLog(currentBuild.value, empty: 'Builds show here. Pick a target in Build.'),
                     BottomTab.tasks => _JobLog(currentTask.value, empty: 'Tasks show here: pub get, test, clean.'),
                     BottomTab.problems => const _ProblemList(),
+                    BottomTab.logs => _JobLog(currentLogs.value, empty: 'Open a device\'s log from Devices.', live: currentLogs),
+                    BottomTab.preview => _JobLog(
+                      currentPreview.value,
+                      empty: 'Start widget previews from Tasks.',
+                      live: currentPreview,
+                    ),
                   },
                 ),
               ),
@@ -149,7 +159,11 @@ class _RunLog extends StatelessWidget {
 class _JobLog extends StatelessWidget {
   final Job? job;
   final String empty;
-  const _JobLog(this.job, {required this.empty});
+
+  /// For a job that runs until stopped: a Stop button, and Close to drop
+  /// its tab.
+  final ValueNotifier<Job?>? live;
+  const _JobLog(this.job, {required this.empty, this.live});
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +175,30 @@ class _JobLog extends StatelessWidget {
       listenable: j,
       builder: (context, _) => Column(
         children: [
-          if (pr != null) _limited(SmartBar(lines: j.log, projectPath: pr.path)),
+          if (live != null)
+            SizedBox(
+              height: 30,
+              child: Row(
+                children: [
+                  Text(j.title, style: TextStyle(fontSize: 12, color: c.muted)),
+                  const Spacer(),
+                  if (j.running)
+                    TextButton(
+                      onPressed: j.cancel,
+                      child: Text('Stop', style: TextStyle(fontSize: 12, color: c.bad)),
+                    )
+                  else
+                    TextButton(
+                      onPressed: () {
+                        live!.value = null;
+                        Bench.instance.showBottom(BottomTab.run);
+                      },
+                      child: const Text('Close', style: TextStyle(fontSize: 12)),
+                    ),
+                ],
+              ),
+            ),
+          if (pr != null && live == null) _limited(SmartBar(lines: j.log, projectPath: pr.path)),
           Expanded(child: LogView(lines: j.log)),
         ],
       ),

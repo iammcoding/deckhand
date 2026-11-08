@@ -8,10 +8,12 @@ import 'package:path/path.dart' as p;
 import '../core/ai.dart';
 import '../core/bench.dart';
 import '../core/devices.dart';
+import '../core/jobs.dart';
 import '../core/problems.dart';
 import '../core/projects.dart';
 import '../core/sdk.dart';
 import '../core/sessions.dart';
+import 'create_project.dart';
 import 'editor.dart';
 import 'explorer.dart';
 import 'panels/ai_chat.dart';
@@ -50,7 +52,12 @@ class _WorkbenchState extends State<Workbench> {
     Devices.instance.addListener(_changed);
     Problems.instance.addListener(_changed);
     currentRun.addListener(_runChanged);
+    sdkChanged.addListener(_readVersion);
     _projectChanged();
+    _readVersion();
+  }
+
+  void _readVersion() {
     Sdk.instance.version().then((v) {
       if (mounted && v != null) setState(() => _flutter = 'Flutter ${v['frameworkVersion']}');
     });
@@ -63,6 +70,7 @@ class _WorkbenchState extends State<Workbench> {
     Devices.instance.removeListener(_changed);
     Problems.instance.removeListener(_changed);
     currentRun.removeListener(_runChanged);
+    sdkChanged.removeListener(_readVersion);
     _watched?.removeListener(_changed);
     super.dispose();
   }
@@ -130,6 +138,17 @@ class _WorkbenchState extends State<Workbench> {
       Command('Toggle bottom panel', 'Layout', b.toggleBottom, keys: '⌘J'),
       Command('Toggle chat', 'Layout', b.toggleAi, keys: '⌘L'),
       Command('Open a project folder', 'Projects', _openFolder, keys: '⌘O'),
+      Command('New project', 'Projects', () => showCreateProject(context), keys: '⇧⌘N'),
+      Command('Flutter SDK: channel, upgrade, settings', 'Show', () => _tab(TabKind.sdk)),
+      Command('Check for Flutter updates', 'Flutter', () => runTask('Check for updates', ['upgrade', '--verify-only'])),
+      Command('Download tools (precache)', 'Flutter', () => _tab(TabKind.sdk)),
+      Command('Emulators', 'Devices', () => _tab(TabKind.devices)),
+      if (pr != null) ...[
+        Command('Generate translations', 'Tasks', () => TasksSide.run('Generate translations', ['gen-l10n'])),
+        Command('Widget previews', 'Tasks', () => b.showActivity(Activity.tasks)),
+        Command('Read a crash (symbolize)', 'Tasks', () => b.showActivity(Activity.tasks)),
+      ],
+      for (final d in Devices.instance.list) Command('Device log: ${d.name}', 'Devices', () => _tab(TabKind.devices)),
       Command('All projects', 'Projects', () => _tab(TabKind.projects)),
       for (final r in Projects.instance.recent.where((r) => r.path != pr?.path).take(8))
         Command('Open ${r.name}', 'Projects', () => Projects.instance.open(r.path)),
@@ -200,6 +219,7 @@ class _WorkbenchState extends State<Workbench> {
         key(LogicalKeyboardKey.keyJ): b.toggleBottom,
         key(LogicalKeyboardKey.keyL): b.toggleAi,
         key(LogicalKeyboardKey.keyO): _openFolder,
+        key(LogicalKeyboardKey.keyN, shift: true): () => showCreateProject(context),
         key(LogicalKeyboardKey.comma): () => _tab(TabKind.settings),
         key(LogicalKeyboardKey.keyW): () => b.close(b.active),
         key(LogicalKeyboardKey.keyE, shift: true): () => b.showActivity(Activity.explorer),
@@ -344,6 +364,7 @@ class _WorkbenchState extends State<Workbench> {
               _foot(c, Icons.space_dashboard_outlined, 'Overview', TabKind.overview, enabled: pr != null),
               _foot(c, Icons.devices_rounded, 'Devices', TabKind.devices),
               _foot(c, Icons.health_and_safety_outlined, 'Doctor', TabKind.doctor),
+              _foot(c, Icons.flutter_dash_rounded, 'Flutter SDK', TabKind.sdk),
               const Spacer(),
               _foot(c, Icons.settings_outlined, 'Settings  ⌘,', TabKind.settings),
             ],
@@ -421,6 +442,8 @@ class _WorkbenchState extends State<Workbench> {
       onSelected: (v) {
         if (v == '_open') {
           _openFolder();
+        } else if (v == '_new') {
+          showCreateProject(context);
         } else if (v == '_all') {
           _tab(TabKind.projects);
         } else {
@@ -438,6 +461,11 @@ class _WorkbenchState extends State<Workbench> {
             ),
           ),
         const PopupMenuDivider(),
+        PopupMenuItem(
+          value: '_new',
+          height: 32,
+          child: Text('New project…', style: TextStyle(fontSize: 13, color: c.text)),
+        ),
         PopupMenuItem(
           value: '_open',
           height: 32,

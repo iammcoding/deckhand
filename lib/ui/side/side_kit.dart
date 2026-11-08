@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
-/// The heading at the top of a side panel, VS Code style.
+/// The heading at the top of a sidebar section.
 class SideTitle extends StatelessWidget {
   final String title;
   final List<Widget> actions;
@@ -18,8 +18,8 @@ class SideTitle extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              title.toUpperCase(),
-              style: TextStyle(fontSize: 11, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: c.muted),
+              title,
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text),
             ),
           ),
           ...actions,

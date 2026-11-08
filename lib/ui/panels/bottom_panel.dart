@@ -29,23 +29,23 @@ class BottomPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                height: 32,
+                height: 36,
                 child: Row(
                   children: [
                     const SizedBox(width: 6),
-                    _tab(c, BottomTab.run, 'RUN', dot: _runDot(c)),
-                    _tab(c, BottomTab.build, 'BUILD', dot: _jobDot(c, currentBuild.value)),
-                    _tab(c, BottomTab.tasks, 'TASKS', dot: _jobDot(c, currentTask.value)),
+                    _tab(c, BottomTab.run, 'Console', dot: _runDot(c)),
+                    _tab(c, BottomTab.build, 'Build', dot: _jobDot(c, currentBuild.value)),
+                    _tab(c, BottomTab.tasks, 'Tasks', dot: _jobDot(c, currentTask.value)),
                     _tab(
                       c,
                       BottomTab.problems,
-                      'PROBLEMS',
+                      'Problems',
                       count: pb.errors + pb.warnings,
                       countColor: pb.errors > 0 ? c.bad : c.warn,
                     ),
                     const Spacer(),
                     IconButton(
-                      tooltip: 'Hide panel  ⌘J',
+                      tooltip: 'Hide console  ⌘J',
                       iconSize: 15,
                       visualDensity: VisualDensity.compact,
                       onPressed: b.toggleBottom,
@@ -93,17 +93,17 @@ class BottomPanel extends StatelessWidget {
   Widget _tab(C c, BottomTab t, String label, {Widget? dot, int count = 0, Color? countColor}) {
     final on = Bench.instance.bottom == t;
     return InkWell(
+      borderRadius: BorderRadius.circular(6),
       onTap: () => Bench.instance.showBottom(t),
       child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 1),
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: on ? c.accent : Colors.transparent, width: 1.5)),
-        ),
+        decoration: BoxDecoration(color: on ? c.raised : null, borderRadius: BorderRadius.circular(6)),
         child: Row(
           children: [
             Text(
               label,
-              style: TextStyle(fontSize: 11, letterSpacing: 0.6, fontWeight: FontWeight.w600, color: on ? c.text : c.muted),
+              style: TextStyle(fontSize: 12, fontWeight: on ? FontWeight.w600 : FontWeight.w500, color: on ? c.text : c.muted),
             ),
             if (dot != null) ...[const SizedBox(width: 6), dot],
             if (count > 0) ...[
@@ -133,7 +133,7 @@ class _RunLog extends StatelessWidget {
     final c = C.of(context);
     final s = this.s;
     final pr = Projects.instance.current;
-    if (s == null) return _empty(c, 'Press Run in the Run panel. The app\'s log shows here.');
+    if (s == null) return _empty(c, 'Press Run at the top. The app\'s log shows here.');
     return ListenableBuilder(
       listenable: s,
       builder: (context, _) => Column(

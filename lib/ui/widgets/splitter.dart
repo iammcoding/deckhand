@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
-/// A thin bar between panels that resizes them when dragged.
+/// The gap between two panels; drag it to resize them. A line shows on hover.
 class Splitter extends StatefulWidget {
   final Axis axis; // vertical: a left/right divider; horizontal: top/bottom
   final ValueChanged<double> onDrag;
@@ -31,13 +31,13 @@ class _SplitterState extends State<Splitter> {
         onHorizontalDragEnd: v ? (_) => widget.onEnd?.call() : null,
         onVerticalDragEnd: v ? null : (_) => widget.onEnd?.call(),
         child: SizedBox(
-          width: v ? 5 : double.infinity,
-          height: v ? double.infinity : 5,
+          width: v ? 8 : double.infinity,
+          height: v ? double.infinity : 8,
           child: Center(
             child: Container(
               width: v ? (_hover ? 2 : 1) : double.infinity,
               height: v ? double.infinity : (_hover ? 2 : 1),
-              color: _hover ? c.accent : c.line,
+              color: _hover ? c.accent : Colors.transparent,
             ),
           ),
         ),

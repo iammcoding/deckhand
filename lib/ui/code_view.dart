@@ -249,26 +249,26 @@ class _CodeViewState extends State<CodeView> {
   }
 }
 
-/// Code colours, close to what people know from their editor.
+/// Code colours, warm to match the app.
 class SyntaxColors {
   final Color keyword, string, comment, number, type, annotation;
   const SyntaxColors(this.keyword, this.string, this.comment, this.number, this.type, this.annotation);
 
   static const _dark = SyntaxColors(
-    Color(0xFF569CD6),
-    Color(0xFFCE9178),
-    Color(0xFF6A9955),
-    Color(0xFFB5CEA8),
-    Color(0xFF4EC9B0),
-    Color(0xFFDCDCAA),
+    Color(0xFFE8A55C), // keyword: the accent, softened
+    Color(0xFFA9C98A), // string
+    Color(0xFF6E6A65), // comment
+    Color(0xFFDB8B6E), // number
+    Color(0xFF8CC7C0), // type
+    Color(0xFFC9A0DC), // annotation
   );
   static const _light = SyntaxColors(
-    Color(0xFF0000FF),
-    Color(0xFFA31515),
-    Color(0xFF008000),
-    Color(0xFF098658),
-    Color(0xFF267F99),
-    Color(0xFF795E26),
+    Color(0xFFB4530A),
+    Color(0xFF4D7A2A),
+    Color(0xFF928D86),
+    Color(0xFFB4462B),
+    Color(0xFF1F7A73),
+    Color(0xFF8A4FA8),
   );
 
   static SyntaxColors of(BuildContext context) => Theme.of(context).brightness == Brightness.dark ? _dark : _light;

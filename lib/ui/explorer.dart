@@ -146,10 +146,10 @@ class _ExplorerState extends State<Explorer> {
             children: [
               Expanded(
                 child: Text(
-                  p.basename(widget.root).toUpperCase(),
+                  p.basename(widget.root),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: c.muted),
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text),
                 ),
               ),
               IconButton(

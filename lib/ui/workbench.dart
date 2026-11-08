@@ -18,7 +18,7 @@ import 'panels/ai_chat.dart';
 import 'panels/bottom_panel.dart';
 import 'side/build_side.dart';
 import 'side/run_side.dart';
-import 'side/side_kit.dart';
+
 import 'side/tasks_side.dart';
 import 'theme.dart';
 import 'widgets/palette.dart';
@@ -26,9 +26,9 @@ import 'widgets/splitter.dart';
 
 const _window = MethodChannel('deckhand/window');
 
-/// The main window, laid out like a code editor: activity bar, side panel,
-/// tabs in the middle, a panel for logs below, chat on the right, and a
-/// status bar.
+/// The main window: a run bar on top, then floating panels: the sidebar
+/// (files, build, tasks), tabs in the middle, the console below, chat on
+/// the right.
 class Workbench extends StatefulWidget {
   final ValueNotifier<ThemeMode> themeMode;
   const Workbench({super.key, required this.themeMode});
@@ -110,7 +110,6 @@ class _WorkbenchState extends State<Workbench> {
       if (pr != null) ...[
         Command('Run on ${Devices.instance.selected?.name ?? 'a device'}', 'Run', startRun),
         Command('Explorer', 'Show', () => b.showActivity(Activity.explorer), keys: '⇧⌘E'),
-        Command('Run panel', 'Show', () => b.showActivity(Activity.run)),
         Command('Build panel', 'Show', () => b.showActivity(Activity.build)),
         Command('Tasks', 'Show', () => b.showActivity(Activity.tasks)),
         Command('Overview', 'Show', () => _tab(TabKind.overview)),
@@ -210,35 +209,37 @@ class _WorkbenchState extends State<Workbench> {
       child: Focus(
         autofocus: true,
         child: Scaffold(
+          backgroundColor: c.bg,
           body: Column(
             children: [
-              _titleBar(c),
+              _topBar(c),
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _activityBar(c),
-                    if (b.sideOpen) ...[
-                      Container(width: b.sideW, color: c.panel, child: _side(c)),
-                      Splitter(axis: Axis.vertical, onDrag: b.resizeSide, onEnd: b.saveLayout),
-                    ] else
-                      Container(width: 1, color: c.line),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(child: EditorArea(themeMode: widget.themeMode)),
-                          if (b.bottomOpen) ...[
-                            Splitter(axis: Axis.horizontal, onDrag: b.resizeBottom, onEnd: b.saveLayout),
-                            SizedBox(height: b.bottomH, child: const BottomPanel()),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (b.sideOpen) ...[
+                        SizedBox(width: b.sideW, child: _card(c, _sidebar(c))),
+                        Splitter(axis: Axis.vertical, onDrag: b.resizeSide, onEnd: b.saveLayout),
+                      ],
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Expanded(child: _card(c, EditorArea(themeMode: widget.themeMode))),
+                            if (b.bottomOpen) ...[
+                              Splitter(axis: Axis.horizontal, onDrag: b.resizeBottom, onEnd: b.saveLayout),
+                              SizedBox(height: b.bottomH, child: _card(c, const BottomPanel())),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                    if (b.aiOpen) ...[
-                      Splitter(axis: Axis.vertical, onDrag: b.resizeAi, onEnd: b.saveLayout),
-                      SizedBox(width: b.aiW, child: const AiChat()),
+                      if (b.aiOpen) ...[
+                        Splitter(axis: Axis.vertical, onDrag: b.resizeAi, onEnd: b.saveLayout),
+                        SizedBox(width: b.aiW, child: _card(c, const AiChat())),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               _statusBar(c),
@@ -249,103 +250,163 @@ class _WorkbenchState extends State<Workbench> {
     );
   }
 
-  Widget _side(C c) {
-    final pr = Projects.instance.current;
-    if (pr == null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SideTitle('Explorer'),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text('No project open.', style: TextStyle(fontSize: 12.5, color: c.muted)),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: FilledButton(onPressed: _openFolder, child: const Text('Open a project')),
-          ),
-        ],
-      );
-    }
+  /// A floating panel: rounded, on the darker window background.
+  Widget _card(C c, Widget child) => Container(
+    decoration: BoxDecoration(
+      color: c.panel,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: c.line),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: child,
+  );
+
+  // ---- Sidebar ---------------------------------------------------------------
+
+  Widget _sidebar(C c) {
     final b = Bench.instance;
+    final pr = Projects.instance.current;
     final cur = b.current;
-    return switch (b.activity) {
-      Activity.explorer => Explorer(
-        root: pr.path,
-        selected: cur?.kind == TabKind.file ? cur!.path : null,
-        onOpen: (f) => b.openFile(f),
-      ),
-      Activity.run => const RunSide(),
-      Activity.build => const BuildSide(),
-      Activity.tasks => const TasksSide(),
-    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Files · Build · Tasks, as a segmented switch.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+          child: Container(
+            height: 28,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(7)),
+            child: Row(
+              children: [
+                for (final (a, label) in const [
+                  (Activity.explorer, 'Files'),
+                  (Activity.build, 'Build'),
+                  (Activity.tasks, 'Tasks'),
+                ])
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: pr == null ? null : () => b.showActivity(a),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 120),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: b.activity == a ? c.raised : Colors.transparent,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: b.activity == a ? FontWeight.w600 : FontWeight.w500,
+                            color: b.activity == a ? c.text : c.muted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: pr == null
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('No project open.', style: TextStyle(fontSize: 12.5, color: c.muted)),
+                      const SizedBox(height: 10),
+                      FilledButton(onPressed: _openFolder, child: const Text('Open a project')),
+                    ],
+                  ),
+                )
+              : switch (b.activity) {
+                  Activity.explorer => Explorer(
+                    root: pr.path,
+                    selected: cur?.kind == TabKind.file ? cur!.path : null,
+                    onOpen: (f) => b.openFile(f),
+                  ),
+                  Activity.build => const BuildSide(),
+                  Activity.tasks => const TasksSide(),
+                },
+        ),
+        // The rest of the app, at the foot of the sidebar.
+        Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: c.line)),
+          ),
+          child: Row(
+            children: [
+              _foot(c, Icons.space_dashboard_outlined, 'Overview', TabKind.overview, enabled: pr != null),
+              _foot(c, Icons.devices_rounded, 'Devices', TabKind.devices),
+              _foot(c, Icons.health_and_safety_outlined, 'Doctor', TabKind.doctor),
+              const Spacer(),
+              _foot(c, Icons.settings_outlined, 'Settings  ⌘,', TabKind.settings),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  // ---- Title bar -----------------------------------------------------------
+  Widget _foot(C c, IconData icon, String tip, TabKind k, {bool enabled = true}) {
+    final on = Bench.instance.current?.kind == k;
+    return IconButton(
+      tooltip: tip,
+      iconSize: 17,
+      visualDensity: VisualDensity.compact,
+      onPressed: enabled ? () => _tab(k) : null,
+      icon: Icon(icon, color: on ? c.accent : c.muted),
+    );
+  }
 
-  Widget _titleBar(C c) {
+  // ---- Top bar -----------------------------------------------------------------
+
+  Widget _topBar(C c) {
     final b = Bench.instance;
     final pr = Projects.instance.current;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      // The window moves when you drag the title bar, and zooms on a double click.
+      // The window moves when you drag the bar, and zooms on a double click.
       onPanStart: Platform.isMacOS ? (_) => _window.invokeMethod('drag').catchError((_) {}) : null,
       onDoubleTap: Platform.isMacOS ? () => _window.invokeMethod('zoom').catchError((_) {}) : null,
-      child: Container(
-        height: 38,
-        decoration: BoxDecoration(
-          color: c.panel,
-          border: Border(bottom: BorderSide(color: c.line)),
-        ),
-        child: Row(
+      child: SizedBox(
+        height: 46,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            // Room for the traffic lights.
-            SizedBox(width: Platform.isMacOS ? 80 : 10),
-            _projectMenu(c, pr),
-            if (_branch != null) ...[
-              const SizedBox(width: 2),
-              Icon(Icons.call_split_rounded, size: 13, color: c.muted),
-              const SizedBox(width: 4),
-              Text(_branch!, style: TextStyle(fontSize: 12, color: c.muted)),
-            ],
-            Expanded(
-              child: Center(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(5),
-                  onTap: () => showPalette(context, _commands()),
-                  child: Container(
-                    width: 380,
-                    height: 24,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: c.bg,
-                      border: Border.all(color: c.line),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.search_rounded, size: 14, color: c.muted),
-                        const SizedBox(width: 7),
-                        Expanded(
-                          child: Text(
-                            pr == null ? 'Deckhand' : 'Search commands and files',
-                            style: TextStyle(fontSize: 12, color: c.muted),
-                          ),
-                        ),
-                        Text(
-                          Platform.isMacOS ? '⌘K' : 'Ctrl K',
-                          style: TextStyle(fontSize: 11, color: c.muted.withValues(alpha: 0.7)),
-                        ),
-                      ],
+            Row(
+              children: [
+                // Room for the traffic lights.
+                SizedBox(width: Platform.isMacOS ? 84 : 12),
+                _projectMenu(c, pr),
+                if (_branch != null) ...[
+                  Icon(Icons.call_split_rounded, size: 13, color: c.muted),
+                  const SizedBox(width: 4),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 140),
+                    child: Text(
+                      _branch!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: c.muted),
                     ),
                   ),
-                ),
-              ),
+                ],
+                const Spacer(),
+                _toggle(c, Icons.search_rounded, 'Commands and files  ⌘K', false, () => showPalette(context, _commands())),
+                const SizedBox(width: 4),
+                _toggle(c, Icons.view_sidebar_outlined, 'Sidebar  ⌘B', b.sideOpen, b.toggleSide, flip: true),
+                _toggle(c, Icons.call_to_action_outlined, 'Console  ⌘J', b.bottomOpen, b.toggleBottom),
+                _toggle(c, Icons.forum_outlined, 'Chat  ⌘L', b.aiOpen, b.toggleAi),
+                const SizedBox(width: 10),
+              ],
             ),
-            _toggle(c, Icons.view_sidebar_outlined, 'Side panel  ⌘B', b.sideOpen, b.toggleSide, flip: true),
-            _toggle(c, Icons.call_to_action_outlined, 'Bottom panel  ⌘J', b.bottomOpen, b.toggleBottom),
-            _toggle(c, Icons.forum_outlined, 'Chat  ⌘L', b.aiOpen, b.toggleAi),
-            const SizedBox(width: 8),
+            const RunBar(),
           ],
         ),
       ),
@@ -393,9 +454,11 @@ class _WorkbenchState extends State<Workbench> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Icon(Icons.anchor_rounded, size: 15, color: c.accent),
+            const SizedBox(width: 7),
             Text(
               pr?.name ?? 'No project',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text),
             ),
             Icon(Icons.expand_more_rounded, size: 15, color: c.muted),
           ],
@@ -411,164 +474,60 @@ class _WorkbenchState extends State<Workbench> {
     onPressed: onTap,
     icon: Transform.flip(
       flipX: flip,
-      child: Icon(icon, color: on ? c.text : c.muted.withValues(alpha: 0.6)),
+      child: Icon(icon, color: on ? c.text : c.muted.withValues(alpha: 0.7)),
     ),
   );
 
-  // ---- Activity bar --------------------------------------------------------
+  // ---- Status line -------------------------------------------------------------
 
-  Widget _activityBar(C c) {
-    final b = Bench.instance;
-    final hasProject = Projects.instance.current != null;
-    final run = currentRun.value;
-    final live = run != null && !run.stopped;
-    final cur = b.current?.kind;
-    return Container(
-      width: 46,
-      color: c.panel,
-      child: Column(
-        children: [
-          const SizedBox(height: 4),
-          _activity(
-            c,
-            Icons.description_outlined,
-            'Explorer  ⇧⌘E',
-            b.sideOpen && b.activity == Activity.explorer,
-            () => b.pick(Activity.explorer),
-          ),
-          _activity(
-            c,
-            Icons.play_circle_outline_rounded,
-            'Run',
-            b.sideOpen && b.activity == Activity.run,
-            hasProject ? () => b.pick(Activity.run) : null,
-            badge: live ? (run.started ? c.good : c.warn) : null,
-          ),
-          _activity(
-            c,
-            Icons.construction_rounded,
-            'Build',
-            b.sideOpen && b.activity == Activity.build,
-            hasProject ? () => b.pick(Activity.build) : null,
-          ),
-          _activity(
-            c,
-            Icons.checklist_rounded,
-            'Tasks',
-            b.sideOpen && b.activity == Activity.tasks,
-            hasProject ? () => b.pick(Activity.tasks) : null,
-          ),
-          const Spacer(),
-          _activity(c, Icons.devices_rounded, 'Devices', cur == TabKind.devices, () => _tab(TabKind.devices)),
-          _activity(c, Icons.health_and_safety_outlined, 'Doctor', cur == TabKind.doctor, () => _tab(TabKind.doctor)),
-          _activity(c, Icons.settings_outlined, 'Settings  ⌘,', cur == TabKind.settings, () => _tab(TabKind.settings)),
-          const SizedBox(height: 6),
-        ],
-      ),
-    );
-  }
-
-  Widget _activity(C c, IconData icon, String tip, bool on, VoidCallback? onTap, {Color? badge}) => Tooltip(
-    message: tip,
-    preferBelow: false,
-    child: InkWell(
+  Widget _statusBar(C c) {
+    final pb = Problems.instance;
+    Widget item(IconData? icon, String text, {Color? color, VoidCallback? onTap}) => InkWell(
       onTap: onTap,
-      child: SizedBox(
-        height: 46,
-        child: Stack(
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            if (on) Positioned(left: 0, top: 8, bottom: 8, child: Container(width: 2, color: c.accent)),
-            Center(
-              child: Icon(
-                icon,
-                size: 21,
-                color: onTap == null ? c.muted.withValues(alpha: 0.3) : (on ? c.text : c.muted.withValues(alpha: 0.8)),
-              ),
-            ),
-            if (badge != null)
-              Positioned(
-                right: 10,
-                bottom: 11,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: badge,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: c.panel, width: 1.5),
-                  ),
-                ),
-              ),
+            if (icon != null) ...[Icon(icon, size: 12, color: color ?? c.muted), const SizedBox(width: 5)],
+            Text(text, style: TextStyle(fontSize: 11.5, color: color ?? c.muted)),
           ],
         ),
       ),
-    ),
-  );
-
-  // ---- Status bar ----------------------------------------------------------
-
-  Widget _statusBar(C c) {
-    final run = currentRun.value;
-    final dev = Devices.instance.selected;
-    final pb = Problems.instance;
-    final live = run != null && !run.stopped;
-    // Blue while the app runs, like an editor in a debug session.
-    final on = live && run.started;
-    final fg = on ? Colors.white : c.muted;
-    Widget item(IconData? icon, String text, {Color? color, VoidCallback? onTap, String? tip}) {
-      final w = InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[Icon(icon, size: 13, color: color ?? fg), const SizedBox(width: 5)],
-              Text(text, style: TextStyle(fontSize: 11.5, color: color ?? fg)),
-            ],
-          ),
-        ),
-      );
-      return tip == null ? w : Tooltip(message: tip, child: w);
-    }
-
-    return Container(
-      height: 24,
-      decoration: BoxDecoration(
-        color: on ? c.accent : c.panel,
-        border: Border(top: BorderSide(color: on ? c.accent : c.line)),
-      ),
+    );
+    return SizedBox(
+      height: 28,
       child: Row(
         children: [
-          const SizedBox(width: 4),
-          if (Projects.instance.current != null)
+          const SizedBox(width: 8),
+          if (Projects.instance.current != null) ...[
             item(
-              null,
-              pb.running ? 'Analyzing…' : '${pb.errors} errors  ${pb.warnings} warnings',
+              Icons.error_outline_rounded,
+              pb.running ? '…' : '${pb.errors}',
+              color: pb.errors > 0 ? c.bad : null,
               onTap: () => Bench.instance.showBottom(BottomTab.problems),
-              tip: 'Problems',
             ),
-          if (run != null)
             item(
-              run.stopped ? Icons.stop_circle_outlined : Icons.circle,
-              run.stopped
-                  ? 'Stopped'
-                  : run.started
-                  ? 'Running on ${run.deviceName}${run.lastReload != null ? ' · ${run.lastReload}' : ''}'
-                  : (run.progress ?? 'Starting…'),
-              color: on ? Colors.white : (run.stopped ? c.muted : c.warn),
-              onTap: () => Bench.instance.showBottom(BottomTab.run),
+              Icons.warning_amber_rounded,
+              pb.running ? '…' : '${pb.warnings}',
+              color: pb.warnings > 0 ? c.warn : null,
+              onTap: () => Bench.instance.showBottom(BottomTab.problems),
             ),
+          ],
           const Spacer(),
-          item(Icons.smartphone_rounded, dev?.name ?? 'No device', onTap: () => Bench.instance.showActivity(Activity.run)),
-          item(Icons.auto_awesome_outlined, Ai.instance.connected ? Ai.instance.model : 'No AI', onTap: Bench.instance.toggleAi),
+          item(
+            Icons.auto_awesome_outlined,
+            Ai.instance.connected ? Ai.instance.model : 'No AI connected',
+            onTap: Bench.instance.toggleAi,
+          ),
           item(
             null,
             _flutter.isEmpty ? (Sdk.instance.ready ? 'Flutter' : 'Flutter not found') : _flutter,
             color: Sdk.instance.ready ? null : c.bad,
             onTap: () => _tab(TabKind.settings),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
         ],
       ),
     );

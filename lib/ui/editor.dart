@@ -20,14 +20,14 @@ class EditorArea extends StatelessWidget {
     final b = Bench.instance;
     final tab = b.current;
     return Container(
-      color: c.bg,
+      color: c.panel,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            height: 34,
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
-              color: c.panel,
               border: Border(bottom: BorderSide(color: c.line)),
             ),
             child: ListView(scrollDirection: Axis.horizontal, children: [for (var i = 0; i < b.tabs.length; i++) _Tab(i)]),
@@ -87,13 +87,11 @@ class _TabState extends State<_Tab> {
         onTertiaryTapUp: (_) => b.close(widget.index),
         onSecondaryTapUp: (d) => _menu(context, d.globalPosition),
         child: Container(
-          padding: const EdgeInsets.only(left: 12, right: 4),
+          margin: const EdgeInsets.only(right: 2),
+          padding: const EdgeInsets.only(left: 10, right: 2),
           decoration: BoxDecoration(
-            color: on ? c.bg : null,
-            border: Border(
-              right: BorderSide(color: c.line),
-              top: BorderSide(color: on ? c.accent : Colors.transparent, width: 1.5),
-            ),
+            color: on ? c.raised : (_hover ? c.raised.withValues(alpha: 0.5) : null),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Row(
             children: [

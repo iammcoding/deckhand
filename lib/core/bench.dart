@@ -7,13 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'problems.dart';
 import 'projects.dart';
 
-/// What the left side panel shows. Picked from the activity bar.
-enum Activity { explorer, run, build, tasks }
+/// What the sidebar shows. Picked from the tabs at its top.
+enum Activity { explorer, build, tasks }
 
 /// What an editor tab holds.
 enum TabKind { file, overview, projects, devices, doctor, settings }
 
-/// The tabs along the bottom panel.
+/// The tabs along the bottom panel. `run` is the console.
 enum BottomTab { run, build, tasks, problems }
 
 class EditorTab {
@@ -177,7 +177,6 @@ class Bench extends ChangeNotifier {
     _save();
   }
 
-  /// The activity bar: a second click on the one showing hides the panel.
   void pick(Activity a) {
     if (activity == a && sideOpen) {
       sideOpen = false;

@@ -183,8 +183,8 @@ OS: ${Platform.operatingSystem}.
                 child: Row(
                   children: [
                     Text(
-                      'CHAT',
-                      style: TextStyle(fontSize: 11, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: c.muted),
+                      'Chat',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.text),
                     ),
                     const SizedBox(width: 8),
                     Expanded(

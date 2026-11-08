@@ -78,7 +78,6 @@ class _OverviewPageState extends State<OverviewPage> {
             dev0 == null
                 ? null
                 : () {
-                    Bench.instance.showActivity(Activity.run);
                     startRun();
                   },
           ),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Deckhand's look: a working tool, quiet and dense. Flat panels, thin rules,
 /// one accent. Dark and light.
 class C {
-  final Color bg, panel, raised, line, text, muted, accent, good, warn, bad;
+  final Color bg, panel, raised, line, text, muted, accent, onAccent, good, warn, bad;
   const C({
     required this.bg,
     required this.panel,
@@ -12,32 +12,35 @@ class C {
     required this.text,
     required this.muted,
     required this.accent,
+    required this.onAccent,
     required this.good,
     required this.warn,
     required this.bad,
   });
 
   static const dark = C(
-    bg: Color(0xFF0E1013),
-    panel: Color(0xFF15181D),
-    raised: Color(0xFF1C2026),
-    line: Color(0xFF262B33),
-    text: Color(0xFFE7E9ED),
-    muted: Color(0xFF8B929E),
-    accent: Color(0xFF3B9EFF),
+    bg: Color(0xFF0B0B0C),
+    panel: Color(0xFF161618),
+    raised: Color(0xFF212124),
+    line: Color(0xFF2A2A2E),
+    text: Color(0xFFEDEBE8),
+    muted: Color(0xFF8E8B87),
+    accent: Color(0xFFF5A33D),
+    onAccent: Color(0xFF1C1206),
     good: Color(0xFF3FB950),
     warn: Color(0xFFD29922),
     bad: Color(0xFFF85149),
   );
 
   static const light = C(
-    bg: Color(0xFFF6F7F9),
+    bg: Color(0xFFEDEBE7),
     panel: Color(0xFFFFFFFF),
-    raised: Color(0xFFF0F2F5),
-    line: Color(0xFFE1E4E8),
-    text: Color(0xFF1F2328),
-    muted: Color(0xFF656D76),
-    accent: Color(0xFF0969DA),
+    raised: Color(0xFFF4F2EF),
+    line: Color(0xFFE3E0DB),
+    text: Color(0xFF1E1C1A),
+    muted: Color(0xFF6E6A65),
+    accent: Color(0xFFC2560C),
+    onAccent: Color(0xFFFFFFFF),
     good: Color(0xFF1A7F37),
     warn: Color(0xFF9A6700),
     bad: Color(0xFFCF222E),
@@ -74,7 +77,7 @@ ThemeData buildTheme(Brightness b) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: c.accent,
-        foregroundColor: Colors.white,
+        foregroundColor: c.onAccent,
         minimumSize: const Size(0, 34),
         padding: const EdgeInsets.symmetric(horizontal: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),

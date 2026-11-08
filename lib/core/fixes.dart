@@ -46,7 +46,52 @@ class Fixes {
     return null;
   }
 
+  /// [pubspec] with `generate: true` under its `flutter:` section. It adds to
+  /// the section that's there: a second `flutter:` would break the file.
+  static String addGenerateFlag(String pubspec) {
+    final lines = pubspec.split('\n');
+    final at = lines.indexWhere((l) => RegExp(r'^flutter:\s*(#.*)?$').hasMatch(l));
+    if (at < 0) {
+      final body = pubspec.endsWith('\n') ? pubspec : '$pubspec\n';
+      return '${body}\nflutter:\n  generate: true\n';
+    }
+    for (var i = at + 1; i < lines.length; i++) {
+      if (RegExp(r'^\S').hasMatch(lines[i])) break; // the next section
+      final m = RegExp(r'^\s+generate:\s*(\S*)').firstMatch(lines[i]);
+      if (m != null) {
+        if (m.group(1) == 'true') return pubspec;
+        lines[i] = lines[i].replaceFirst(m.group(0)!, '  generate: true');
+        return lines.join('\n');
+      }
+    }
+    lines.insert(at + 1, '  generate: true');
+    return lines.join('\n');
+  }
+
   static final List<Fix? Function(String text, String project)> _rules = [
+    // gen-l10n needs a flag in the pubspec.
+    (t, pr) {
+      if (!t.contains('generate flag turned on')) return null;
+      return Fix(
+        'Translations need a setting in pubspec.yaml',
+        'Adds generate: true under flutter: in pubspec.yaml. Run Generate translations again afterwards.',
+        [
+          FixStep(
+            'Add the setting',
+            edit: () async {
+              try {
+                final f = File(p.join(pr, 'pubspec.yaml'));
+                await f.writeAsString(addGenerateFlag(await f.readAsString()));
+                return null;
+              } catch (e) {
+                return "Couldn't change pubspec.yaml: $e";
+              }
+            },
+          ),
+        ],
+      );
+    },
+
     // A desktop target the project was never set up for.
     (t, pr) {
       final m = RegExp(r'No (macOS|Windows|Linux) desktop project configured').firstMatch(t);

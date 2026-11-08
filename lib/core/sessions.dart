@@ -132,6 +132,10 @@ class RunSession extends ChangeNotifier {
   final Map<int, Completer<Map<String, dynamic>>> _pending = {};
   String? lastReload;
 
+  /// For output that belongs in this log but isn't the app's, like a command
+  /// a fix ran.
+  void add(String text, [LogLevel level = LogLevel.info]) => _add(text, level);
+
   void _add(String text, [LogLevel level = LogLevel.info]) {
     log.add(LogLine(text, level));
     if (log.length > 20000) log.removeRange(0, log.length - 20000);

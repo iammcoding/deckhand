@@ -7,15 +7,21 @@ import '../../core/sdk.dart';
 import '../../core/sessions.dart';
 import '../../core/shell.dart';
 import '../theme.dart';
-import 'log_view.dart';
 
 /// Above a log: a problem Deckhand recognises, with a Fix button, or Ask AI
 /// for anything else. What either runs is shown first and runs only on a
-/// click, and its output appears right here.
+/// click, and its output goes to the log below.
+/// True when a shell command writes to a file by itself.
+bool writesFile(String command) => RegExp(r'>|\bsed\s+-i|\btee\b|\bperl\s+-[a-z]*i').hasMatch(command);
+
 class SmartBar extends StatefulWidget {
   final List<LogLine> lines;
   final String projectPath;
-  const SmartBar({super.key, required this.lines, required this.projectPath});
+
+  /// Adds to the log below. What a fix or an agent runs goes there, so there
+  /// is one log to read rather than a small one inside this bar.
+  final void Function(String text, LogLevel level) log;
+  const SmartBar({super.key, required this.lines, required this.projectPath, required this.log});
 
   @override
   State<SmartBar> createState() => _SmartBarState();
@@ -55,9 +61,26 @@ class _SmartBarState extends State<SmartBar> {
         false;
     if (!ok || !mounted) return;
     final run = AgentRun(a, widget.projectPath);
-    run.addListener(() => mounted ? setState(() {}) : null);
+    _follow(run, run.log);
     setState(() => _agentRun = run);
     await run.start(widget.lines);
+  }
+
+  /// Sends what [source] prints to the log, even after this bar has gone: a
+  /// command keeps running if you switch tabs.
+  void _follow(Listenable source, List<LogLine> lines) {
+    final log = widget.log;
+    var sent = 0;
+    void send() {
+      while (sent < lines.length) {
+        final l = lines[sent++];
+        log(l.text, l.level);
+      }
+      if (mounted) setState(() {});
+    }
+
+    source.addListener(send);
+    send();
   }
 
   int get _errors => widget.lines.where((l) => l.level == LogLevel.error).length;
@@ -79,7 +102,7 @@ class _SmartBarState extends State<SmartBar> {
   Future<void> _runCommand(String command) async {
     final job = ShellJob(command, cwd: widget.projectPath);
     setState(() => _runs.add(job));
-    job.addListener(() => mounted ? setState(() {}) : null);
+    _follow(job, job.log);
     await job.start();
   }
 
@@ -92,7 +115,7 @@ class _SmartBarState extends State<SmartBar> {
       } else if (s.command != null) {
         final job = ShellJob(s.command!, cwd: widget.projectPath);
         setState(() => _runs.add(job));
-        job.addListener(() => mounted ? setState(() {}) : null);
+        _follow(job, job.log);
         if (await job.start() != 0) return;
       }
     }
@@ -134,6 +157,23 @@ class _SmartBarState extends State<SmartBar> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (writesFile(command))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 16, color: c.warn),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'This command changes a file. AI often gets that wrong, so check it first, or make the change yourself.',
+                            style: TextStyle(fontSize: 12.5, height: 1.4, color: c.warn),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 Text('In ${widget.projectPath}', style: TextStyle(fontSize: 12, color: c.muted)),
                 const SizedBox(height: 10),
                 Container(
@@ -235,9 +275,9 @@ class _SmartBarState extends State<SmartBar> {
                 const SizedBox(width: 6),
                 OutlinedButton.icon(
                   onPressed: _asking ? null : _ask,
-                  icon: _asking
-                      ? SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: c.muted))
-                      : const Icon(Icons.auto_awesome_outlined, size: 15),
+                  // A still icon on purpose: a local model can take minutes, and
+                  // a spinner would redraw the whole window all that time.
+                  icon: Icon(_asking ? Icons.hourglass_empty_rounded : Icons.auto_awesome_outlined, size: 15),
                   label: Text(_asking ? 'Reading…' : 'Ask AI'),
                 ),
               ],
@@ -260,7 +300,6 @@ class _SmartBarState extends State<SmartBar> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(height: 200, child: LogView(lines: run.log)),
                   if (!run.running && run.git && run.changed.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -293,23 +332,17 @@ class _SmartBarState extends State<SmartBar> {
                 ],
               ),
             ),
-          if (_runs.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: SizedBox(height: 160, child: LogView(lines: [for (final r in _runs) ...r.log])),
-            ),
         ],
       ),
     );
   }
 
+  /// The answer, as plain text in the bar: a dark box here read as a second
+  /// terminal.
   Widget _answerView(C c, AiAnswer a) => Container(
-    margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-    padding: const EdgeInsets.all(12),
+    padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
     decoration: BoxDecoration(
-      color: c.bg,
-      borderRadius: BorderRadius.circular(5),
-      border: Border.all(color: c.line),
+      border: Border(top: BorderSide(color: c.line)),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,6 +356,13 @@ class _SmartBarState extends State<SmartBar> {
                 a.summary,
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.text),
               ),
+            ),
+            IconButton(
+              tooltip: 'Close',
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => setState(() => _answer = null),
+              icon: const Icon(Icons.close_rounded),
             ),
           ],
         ),

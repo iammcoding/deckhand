@@ -154,12 +154,7 @@ class _RunLog extends StatelessWidget {
     if (s == null) return _empty(c, 'Press Run at the top. The app\'s log shows here.');
     return ListenableBuilder(
       listenable: s,
-      builder: (context, _) => Column(
-        children: [
-          if (pr != null) _limited(SmartBar(lines: s.log, projectPath: pr.path)),
-          Expanded(child: LogView(lines: s.log)),
-        ],
-      ),
+      builder: (context, _) => _BarAndLog(lines: s.log, add: s.add, projectPath: pr?.path),
     );
   }
 }
@@ -206,20 +201,39 @@ class _JobLog extends StatelessWidget {
                 ],
               ),
             ),
-          if (pr != null && live == null) _limited(SmartBar(lines: j.log, projectPath: pr.path)),
-          Expanded(child: LogView(lines: j.log)),
+          Expanded(
+            child: _BarAndLog(lines: j.log, add: j.add, projectPath: live == null ? pr?.path : null),
+          ),
         ],
       ),
     );
   }
 }
 
-/// The fix bar can grow (an answer, a command's output); in a short panel it
-/// scrolls rather than pushing the log out.
-Widget _limited(Widget child) => ConstrainedBox(
-  constraints: const BoxConstraints(maxHeight: 260),
-  child: SingleChildScrollView(child: child),
-);
+/// The fix bar over the log. The bar can grow with an answer; it scrolls past
+/// 60% of the height, so the log always keeps room and stays one log.
+class _BarAndLog extends StatelessWidget {
+  final List<LogLine> lines;
+  final void Function(String text, LogLevel level) add;
+  final String? projectPath;
+  const _BarAndLog({required this.lines, required this.add, required this.projectPath});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => Column(
+      children: [
+        if (projectPath != null)
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: box.maxHeight * 0.6),
+            child: SingleChildScrollView(
+              child: SmartBar(lines: lines, projectPath: projectPath!, log: add),
+            ),
+          ),
+        Expanded(child: LogView(lines: lines)),
+      ],
+    ),
+  );
+}
 
 Widget _empty(C c, String text) => Center(
   child: Text(text, style: TextStyle(color: c.muted, fontSize: 12.5)),

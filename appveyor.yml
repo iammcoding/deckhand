@@ -1,0 +1,21 @@
+# Windows build. AppVeyor is free for open source and works without GitHub Actions.
+image: Visual Studio 2022
+branches:
+  only:
+    - main
+
+install:
+  - git clone --depth 1 --branch 3.47.6 https://github.com/flutter/flutter.git C:\flutter
+  - set PATH=C:\flutter\bin;%PATH%
+  - call flutter --version
+
+build_script:
+  - call flutter pub get
+  - call flutter build windows --release
+
+test: off
+
+artifacts:
+  - path: build\windows\x64\runner\Release
+    name: deckhand-windows
+    type: zip

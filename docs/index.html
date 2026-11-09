@@ -45,6 +45,9 @@ nav img { width:30px; height:30px; }
 nav strong { font-size:17px; }
 nav a { margin-left:auto; color:var(--text); text-decoration:none; font-size:15px; }
 nav a:hover { color:var(--accent); }
+.ribbon { display:none; position:absolute; top:42px; right:-58px; width:250px; padding:8px 0; transform:rotate(45deg); background:var(--accent); color:var(--on); text-align:center; font-size:14px; font-weight:650; text-decoration:none; box-shadow:0 2px 6px rgba(0,0,0,.35); z-index:2; }
+.ribbon:hover { filter:brightness(1.08); }
+@media (min-width:1000px) { body { position:relative; overflow-x:hidden; } .ribbon { display:block; } .navfork { display:none; } }
 h1 { font-size:clamp(38px,6.4vw,68px); line-height:1.04; letter-spacing:-.03em; margin:44px 0 18px; max-width:13em; }
 .lede { font-size:clamp(18px,2.3vw,22px); color:var(--muted); max-width:36em; margin:0 0 28px; }
 .btn { display:inline-block; background:var(--accent); color:var(--on); font-weight:650; text-decoration:none; padding:13px 22px; border-radius:7px; }
@@ -76,11 +79,12 @@ footer { margin-top:72px; padding:26px 0 40px; border-top:1px solid var(--line);
 </style>
 </head>
 <body>
+<a class="ribbon" href="https://github.com/iammcoding/deckhand/fork">Fork me on GitHub</a>
 <div class="wrap">
   <nav aria-label="Main">
     <img src="images/logo.svg" alt="" width="30" height="30">
     <strong>Deckhand</strong>
-    <a href="https://github.com/iammcoding/deckhand">GitHub</a>
+    <a class="navfork" href="https://github.com/iammcoding/deckhand/fork">Fork me on GitHub</a>
   </nav>
 
   <header>

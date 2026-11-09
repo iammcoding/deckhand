@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deckhand: a free desktop app for Flutter development</title>
+<meta name="description" content="Open source Flutter GUI for your desktop. Run, hot reload, build, manage Flutter versions with FVM, and fix errors with AI you can undo.">
+<link rel="canonical" href="https://iammcoding.github.io/deckhand/">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#0B0B0C">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Deckhand">
+<meta property="og:title" content="Deckhand: a free desktop app for Flutter development">
+<meta property="og:description" content="Run, hot reload, build, manage Flutter versions with FVM, and fix errors with AI you can undo.">
+<meta property="og:url" content="https://iammcoding.github.io/deckhand/">
+<meta property="og:image" content="https://iammcoding.github.io/deckhand/images/social.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Deckhand window with its task list, project overview and AI chat">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Deckhand",
+  "description": "Open source desktop app for Flutter development: run, build, Flutter version management with FVM, and AI fixes you can undo.",
+  "url": "https://iammcoding.github.io/deckhand/",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS",
+  "license": "https://github.com/iammcoding/deckhand/blob/main/LICENSE",
+  "codeRepository": "https://github.com/iammcoding/deckhand",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<style>
+:root { color-scheme: dark light; --bg:#0B0B0C; --panel:#161618; --line:#2A2A2E; --text:#EDEBE8; --muted:#A09C97; --accent:#F5A33D; --on:#1C1206; }
+@media (prefers-color-scheme: light) { :root { --bg:#F4F2EE; --panel:#FFFFFF; --line:#DEDAD4; --text:#1E1C1A; --muted:#625E59; --accent:#B34E08; --on:#FFFFFF; } }
+* { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; background:var(--bg); color:var(--text); font:17px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.wrap { max-width:1080px; margin:0 auto; padding:0 24px; }
+a { color:var(--accent); }
+nav { display:flex; align-items:center; gap:10px; padding:22px 0; }
+nav img { width:30px; height:30px; }
+nav strong { font-size:17px; }
+nav a { margin-left:auto; color:var(--text); text-decoration:none; font-size:15px; }
+nav a:hover { color:var(--accent); }
+h1 { font-size:clamp(38px,6.4vw,68px); line-height:1.04; letter-spacing:-.03em; margin:44px 0 18px; max-width:13em; }
+.lede { font-size:clamp(18px,2.3vw,22px); color:var(--muted); max-width:36em; margin:0 0 28px; }
+.btn { display:inline-block; background:var(--accent); color:var(--on); font-weight:650; text-decoration:none; padding:13px 22px; border-radius:7px; }
+.note { font-size:14.5px; color:var(--muted); margin:14px 0 44px; }
+img.shot { display:block; width:100%; height:auto; }
+.hero { margin:0 -14px; }
+section { padding:64px 0 0; }
+h2 { font-size:clamp(26px,3.6vw,38px); line-height:1.15; letter-spacing:-.02em; margin:0 0 12px; }
+.row { display:grid; grid-template-columns:5fr 7fr; gap:36px; align-items:center; }
+.row p { color:var(--muted); margin:0; }
+.row > * { min-width:0; }
+.row figure { margin:0; }
+.steps { list-style:none; margin:26px 0 0; padding:0; border-top:1px solid var(--line); }
+.steps li > * { min-width:0; }
+.steps li { display:grid; grid-template-columns:150px 1fr; gap:18px; padding:16px 0; border-bottom:1px solid var(--line); }
+.steps b { font-weight:650; }
+.steps span { color:var(--muted); }
+.list { columns:2; column-gap:40px; margin:20px 0 0; padding:0 0 0 18px; color:var(--muted); }
+.list li { margin-bottom:8px; break-inside:avoid; }
+pre { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:18px 20px; overflow-x:auto; font:14.5px/1.6 ui-monospace,Menlo,Consolas,monospace; margin:18px 0 0; }
+footer { margin-top:72px; padding:26px 0 40px; border-top:1px solid var(--line); color:var(--muted); font-size:14.5px; display:flex; flex-wrap:wrap; gap:8px 20px; }
+@media (max-width:760px) {
+  .row { grid-template-columns:1fr; gap:18px; }
+  .steps li { grid-template-columns:1fr; gap:2px; }
+  .list { columns:1; }
+  .hero { margin:0 -8px; }
+  section { padding-top:48px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav aria-label="Main">
+    <img src="images/logo.svg" alt="" width="30" height="30">
+    <strong>Deckhand</strong>
+    <a href="https://github.com/iammcoding/deckhand">GitHub</a>
+  </nav>
+
+  <header>
+    <h1>Your whole Flutter workflow, in one window.</h1>
+    <p class="lede">Deckhand is a free, open source desktop app for Flutter. Run and hot reload, build, switch Flutter versions, and fix errors with AI you can undo.</p>
+    <a class="btn" href="https://github.com/iammcoding/deckhand#run-it">Get it on GitHub</a>
+    <p class="note">Early days: used on macOS so far, built from source. Windows and Linux aren't tested yet.</p>
+  </header>
+
+  <figure class="hero" style="margin-top:0;margin-bottom:0">
+    <img class="shot" src="images/workbench.png" width="2784" height="1864" alt="The Deckhand window with its task list, project overview and AI chat">
+  </figure>
+
+  <main>
+    <section id="ai">
+      <h2>AI fixes that can't wreck your project</h2>
+      <p class="lede" style="margin-bottom:0">An AI once told us a problem was resolved right after it broke the project. So Deckhand checks the result itself.</p>
+      <ol class="steps">
+        <li><b>Saves a copy</b><span>Your project's files are saved before any fix runs, with or without git.</span></li>
+        <li><b>Makes the fix</b><span>The AI reads your files and makes exact edits. It has no terminal, stays in the project, and can't read <code>.env</code> files or signing keys.</span></li>
+        <li><b>Checks it</b><span>If a config file no longer reads, <code>flutter pub get</code> fails, or the same error comes back, your files go back automatically.</span></li>
+        <li><b>You can undo</b><span>If it worked, the change stays, with one click to undo it.</span></li>
+      </ol>
+      <p style="color:var(--muted);margin-top:20px">Use Claude, OpenAI, Gemini, OpenRouter, or a local model through Ollama, where nothing leaves your computer. It catches broken projects, not logic mistakes, so read what it changed.</p>
+    </section>
+
+    <section id="versions" class="row">
+      <div>
+        <h2>Flutter versions, without the commands</h2>
+        <p>A GUI for <a href="https://fvm.app">FVM</a>. Install any Flutter release and pin one per project. Run, build and analysis all follow the project's <code>.fvmrc</code>, even after a <code>git checkout</code> changes it.</p>
+      </div>
+      <figure><img class="shot" loading="lazy" src="images/flutter-versions.png" width="2784" height="1864" alt="The Flutter versions tab, listing releases to install"></figure>
+    </section>
+
+    <section id="devices" class="row">
+      <div>
+        <h2>Every device in one place</h2>
+        <p>Run on any device from the top bar. Take screenshots, read device logs, install, uninstall, attach to a running app, and start emulators.</p>
+      </div>
+      <figure><img class="shot" loading="lazy" src="images/devices.png" width="2784" height="1864" alt="The Devices tab with an iPhone, macOS and Chrome connected"></figure>
+    </section>
+
+    <section id="build" class="row">
+      <div>
+        <h2>Builds with no flags to remember</h2>
+        <p>Android APK and App Bundle, iOS IPA, macOS, Windows and web, in debug, profile or release, with the log right below.</p>
+      </div>
+      <figure><img class="shot" loading="lazy" src="images/build.png" width="2784" height="1864" alt="The Build panel with targets and release modes"></figure>
+    </section>
+
+    <section id="more">
+      <h2>And the rest of the Flutter tool</h2>
+      <ul class="list">
+        <li>Flutter doctor as a checklist</li>
+        <li>Channels, upgrade, downgrade and precache</li>
+        <li>New project form</li>
+        <li>Analyzer problems: click to jump to the line</li>
+        <li>File tree and code viewer with tabs</li>
+        <li>Tests, translations, format and <code>dart fix</code></li>
+        <li>Integration tests and <code>flutter drive</code></li>
+        <li>Widget previews and crash symbolizing</li>
+        <li>Coding agents like Claude Code and Aider, with the same safety net</li>
+        <li>Command palette and go to file</li>
+      </ul>
+    </section>
+
+    <section id="start">
+      <h2>Run it</h2>
+      <p style="color:var(--muted);margin:0">You need Flutter 3.47 or newer.</p>
+<pre><code>git clone https://github.com/iammcoding/deckhand
+cd deckhand
+flutter run -d macos</code></pre>
+    </section>
+  </main>
+
+  <footer>
+    <span>Deckhand is MIT licensed and not affiliated with Google or the Flutter team.</span>
+    <a href="https://github.com/iammcoding/deckhand">Source on GitHub</a>
+    <a href="https://github.com/iammcoding/deckhand/issues">Report a bug</a>
+  </footer>
+</div>
+</body>
+</html>

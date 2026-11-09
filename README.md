@@ -4,7 +4,9 @@
 
 <h1 align="center">Deckhand</h1>
 
-<p align="center">A desktop app for your whole Flutter workflow: run, build, switch Flutter versions, and fix errors with AI that can't wreck your project.</p>
+<p align="center">A free, open source desktop app for Flutter: a GUI to run and hot reload, build, manage Flutter versions with FVM, and fix errors with AI you can undo.</p>
+
+<p align="center"><a href="https://iammcoding.github.io/deckhand/">Website</a></p>
 
 ![Deckhand with the task list, project overview and AI chat open](docs/images/workbench.png)
 
